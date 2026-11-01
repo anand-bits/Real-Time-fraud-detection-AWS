@@ -1,0 +1,75 @@
+flowchart LR
+  PAY["Payment networks / merchant apps\nTokenized payment events"] --> EDGE["AWS Global Accelerator + Route 53\nhealth checks, region steering"]
+
+  subgraph PROD_A["PCI production account • Region A • active"]
+    direction TB
+    APIA["Amazon API Gateway\nWAF + request limits"] --> AUTH_A["Fraud decision service\nLambda • deadline • fallback policy"]
+    AUTH_A --> FEAT_A["DynamoDB Global Tables\nMREC online risk features"]
+    AUTH_A --> MODEL_A["SageMaker real-time endpoint\nchampion / canary model"]
+    AUTH_A --> LEDGER_A["DynamoDB decision + idempotency ledger\nconditional writes • tokenized keys"]
+    AUTH_A -->|stable event ID| STREAM_A["Kinesis Data Streams\nregional payment event log"]
+    STREAM_A --> FLINK_A["Managed Service for Apache Flink\nvelocity windows • late events • rules"]
+    FLINK_A --> FEAT_A
+    FLINK_A --> ALERT_A["Risk action stream\nstep-up / review / block"]
+    STREAM_A --> FH_A["Data Firehose\nretry + error prefix"]
+    FH_A --> RAW_A[("S3 raw zone\nKMS + object lock policy")]
+    STREAM_A --> DLQ_A["SQS quarantine / replay\npoison events + audit"]
+  end
+
+  subgraph PROD_B["PCI production account • Region B • active"]
+    direction TB
+    APIB["Amazon API Gateway\nWAF + request limits"] --> AUTH_B["Fraud decision service\nLambda • deadline • fallback policy"]
+    AUTH_B --> FEAT_B["DynamoDB Global Tables\nMREC online risk features"]
+    AUTH_B --> MODEL_B["SageMaker real-time endpoint\nchampion / canary model"]
+    AUTH_B --> LEDGER_B["DynamoDB decision + idempotency ledger\nconditional writes • tokenized keys"]
+    AUTH_B -->|stable event ID| STREAM_B["Kinesis Data Streams\nregional payment event log"]
+    STREAM_B --> FLINK_B["Managed Service for Apache Flink\nvelocity windows • late events • rules"]
+    FLINK_B --> FEAT_B
+    FLINK_B --> ALERT_B["Risk action stream\nstep-up / review / block"]
+    STREAM_B --> FH_B["Data Firehose\nretry + error prefix"]
+    FH_B --> RAW_B[("S3 raw zone\nKMS + object lock policy")]
+    STREAM_B --> DLQ_B["SQS quarantine / replay\npoison events + audit"]
+  end
+
+  EDGE --> APIA
+  EDGE --> APIB
+  AUTH_A -->|approve / decline / step-up| PAY
+  AUTH_B -->|approve / decline / step-up| PAY
+  FEAT_A <-->|single-writer home-region routing\nversioned, idempotent features| FEAT_B
+  LEDGER_A <-->|DynamoDB MRSC\n2 replicas + witness Region C| LEDGER_B
+  FLINK_A -->|source-only relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_B
+  FLINK_B -->|source-only relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_A
+
+  subgraph DATA["Data + model platform account"]
+    direction TB
+    RAW_A --> ICE["Glue Spark + Apache Iceberg\nbronze → silver → gold\nCDC + dedupe + reconciliation"]
+    RAW_B --> ICE
+    CAT["Glue Data Catalog + Lake Formation\nrow / column grants"] --- ICE
+    ICE --> ATH["Athena\nad hoc investigation"]
+    ICE --> WH["Redshift Serverless\ncase analytics (optional) "]
+    ICE --> TRAIN["SageMaker Pipelines\ntrain • backtest • bias / drift checks"]
+    TRAIN --> REG["SageMaker Model Registry\napproval + lineage"]
+    REG -->|canary + rollback gates| MODEL_A
+    REG -->|canary + rollback gates| MODEL_B
+    ORCH["Step Functions\nreplay • reconciliation • retraining"] --> ICE
+    ORCH --> TRAIN
+  end
+
+  subgraph PLATFORM["Security, resilience, and operations • all accounts / Regions"]
+    direction TB
+    SEC["Organizations + separate PCI / data / security accounts\nIAM least privilege • KMS multi-Region keys • PrivateLink\nCloudTrail • GuardDuty • Security Hub • Lake Formation"]
+    OBS["CloudWatch + X-Ray + OpenTelemetry\nlatency / fraud recall / false-positive / lag SLOs"]
+    BUS["EventBridge incident bus → SNS / PagerDuty\nDLQ age • model fallback • replication lag • Flink checkpoints"]
+    CICD["CI/CD with OIDC + Terraform\nunit / replay / load / chaos tests\nblue-green Flink + model deployment"]
+    SEC --- OBS --- BUS
+    CICD --- SEC
+  end
+
+  classDef primary fill:#eaf2ff,stroke:#3972a5,stroke-width:2px,color:#10283f
+  classDef store fill:#e8f5ed,stroke:#3a8158,stroke-width:2px,color:#153d28
+  classDef ops fill:#fff4df,stroke:#bd852f,stroke-width:2px,color:#4d3510
+  classDef model fill:#f1eaff,stroke:#7953a6,stroke-width:2px,color:#35204f
+  class APIA,APIB,AUTH_A,AUTH_B,STREAM_A,STREAM_B,FLINK_A,FLINK_B primary
+  class FEAT_A,FEAT_B,LEDGER_A,LEDGER_B,RAW_A,RAW_B,ICE store
+  class DLQ_A,DLQ_B,ALERT_A,ALERT_B,OBS,BUS,ORCH ops
+  class MODEL_A,MODEL_B,TRAIN,REG model
