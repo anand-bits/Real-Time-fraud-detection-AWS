@@ -1,0 +1,12 @@
+flowchart TB
+  A["Project context<br/>Synthetic card-not-present e-commerce payments"] --> B["1. Define the decision event<br/>What enters the authorization path?"]
+  B --> C["2. Define fraud truth<br/>Confirmed fraud / chargeback label<br/>How delayed? What is the label window?"]
+  C --> D["3. Define allowed action<br/>Approve • Step-up • Manual review • Decline"]
+  D --> E["4. Define decision policy<br/>Score + rules • thresholds • reason codes"]
+  E --> F["5. Define failure behavior<br/>Model timeout • stale features • stream lag • regional failover"]
+  F --> G["6. Agree success measures<br/>Latency • recall • false declines • review capacity • availability"]
+  G --> H["7. Define guardrails and owners<br/>Synthetic/tokenized only • privacy • audit • risk approval"]
+  H --> I["Step 1 output<br/>One-page scope • decision matrix • metric definitions • test scenarios"]
+  I --> J["Next: Step 2<br/>Record architecture decisions and SLO/RTO/RPO choices"]
+  G -. targets owned by business/risk .-> R["Do not guess thresholds<br/>Set them with accountable owners"]
+  C -. delayed labels .-> L["Prevent label leakage<br/>Keep event time and label-observed time"]

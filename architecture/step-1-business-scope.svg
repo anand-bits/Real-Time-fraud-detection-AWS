@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" role="img" aria-labelledby="title desc">
+<title id="title">SentinelPay Step 1: define the fraud decision</title>
+<desc id="desc">A scope workflow for defining payment events, fraud labels, allowed actions, policy, failure behavior, success measures, guardrails, accountable owners, and the Step 1 scope output before architecture decisions.</desc>
+<defs>
+<marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#53677d"/></marker>
+<style>
+.bg{fill:#f4f7fb}.card{fill:#fff;stroke:#6c8cab;stroke-width:2;rx:15}.start{fill:#e8f1ff;stroke:#3d76a5;stroke-width:2.5;rx:18}.out{fill:#e7f5ed;stroke:#3e865b;stroke-width:2.5;rx:18}.warn{fill:#fff5df;stroke:#bb8737;stroke-width:2;rx:14}.next{fill:#f0eafb;stroke:#76549c;stroke-width:2;rx:18}.head{font:700 28px sans-serif;fill:#1d334b}.sub{font:15px sans-serif;fill:#52677c}.label{font:700 17px sans-serif;fill:#21384e}.small{font:14px sans-serif;fill:#40576d}.tiny{font:13px sans-serif;fill:#566a7d}.line{fill:none;stroke:#53677d;stroke-width:2.5;marker-end:url(#arrow)}.dash{stroke-dasharray:8 6}
+</style></defs>
+<rect class="bg" width="1500" height="1000"/>
+<text x="52" y="52" class="head">SentinelPay | Step 1: define the fraud decision</text>
+<text x="54" y="82" class="sub">Agree what the system decides, what “fraud” means, and how success will be measured before building AWS resources.</text>
+<rect x="430" y="112" width="640" height="64" class="start"/>
+<text x="750" y="139" text-anchor="middle" class="label"><tspan x="750">Working assumption: synthetic card-not-present</tspan><tspan x="750" dy="23" class="small">e-commerce payments • tokenized identifiers • no real card data</tspan></text>
+<path d="M750 176 V203" class="line"/>
+<rect x="460" y="205" width="580" height="75" class="card"/>
+<text x="750" y="235" text-anchor="middle" class="label"><tspan x="750">1. Define the decision event</tspan><tspan x="750" dy="23" class="small">What payment arrives, and at which point must the service respond?</tspan></text>
+<path d="M750 280 V306" class="line"/>
+<rect x="460" y="308" width="580" height="82" class="card"/>
+<text x="750" y="338" text-anchor="middle" class="label"><tspan x="750">2. Define fraud truth</tspan><tspan x="750" dy="23" class="small">Confirmed fraud / chargeback • label delay • maturity window</tspan></text>
+<path d="M750 390 V416" class="line"/>
+<rect x="460" y="418" width="580" height="72" class="card"/>
+<text x="750" y="448" text-anchor="middle" class="label"><tspan x="750">3. Define allowed actions</tspan><tspan x="750" dy="23" class="small">Approve • step-up • manual review • decline</tspan></text>
+<path d="M750 490 V516" class="line"/>
+<rect x="460" y="518" width="580" height="82" class="card"/>
+<text x="750" y="548" text-anchor="middle" class="label"><tspan x="750">4. Define policy and failure behavior</tspan><tspan x="750" dy="23" class="small">Thresholds • reason codes • model timeout • stale features • failover</tspan></text>
+<path d="M750 600 V626" class="line"/>
+<rect x="460" y="628" width="580" height="82" class="card"/>
+<text x="750" y="658" text-anchor="middle" class="label"><tspan x="750">5. Agree measurable success</tspan><tspan x="750" dy="23" class="small">Latency • recall • false declines • review capacity • availability</tspan></text>
+<path d="M750 710 V736" class="line"/>
+<rect x="460" y="738" width="580" height="76" class="card"/>
+<text x="750" y="768" text-anchor="middle" class="label"><tspan x="750">6. Set guardrails and name owners</tspan><tspan x="750" dy="22" class="small">Risk / business • payments • security / privacy • operations • data / ML</tspan></text>
+<path d="M750 814 V842" class="line"/>
+<rect x="370" y="844" width="760" height="78" class="out"/>
+<text x="750" y="874" text-anchor="middle" class="label"><tspan x="750">Step 1 output: signed scope charter + decision matrix</tspan><tspan x="750" dy="23" class="small">Metric definitions • fallback rules • synthetic test scenarios</tspan></text>
+<rect x="60" y="324" width="300" height="122" class="warn"/>
+<text x="210" y="357" text-anchor="middle" class="label"><tspan x="210">Delayed labels</tspan><tspan x="210" dy="23" class="small">Record event time and</tspan><tspan x="210" dy="21" class="small">label-observed time separately</tspan><tspan x="210" dy="21" class="tiny">Prevent training leakage</tspan></text>
+<path d="M460 350 H360" class="line dash"/>
+<rect x="1140" y="628" width="300" height="122" class="warn"/>
+<text x="1290" y="661" text-anchor="middle" class="label"><tspan x="1290">Do not guess targets</tspan><tspan x="1290" dy="23" class="small">Business and risk owners</tspan><tspan x="1290" dy="21" class="small">set thresholds and tradeoffs</tspan><tspan x="1290" dy="21" class="tiny">Use measured evidence</tspan></text>
+<path d="M1040 668 H1140" class="line dash"/>
+<rect x="450" y="944" width="600" height="42" class="next"/>
+<text x="750" y="971" text-anchor="middle" class="label">Then proceed to Step 2: architecture decision records</text>
+</svg>
