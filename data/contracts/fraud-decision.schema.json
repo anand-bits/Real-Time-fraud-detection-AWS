@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sentinelpay.example/fraud-decision-v1.json",
+  "title": "FraudDecisionV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "data_classification",
+    "schema_version",
+    "decision_id",
+    "event_id",
+    "payment_id",
+    "decision",
+    "risk_score",
+    "reason_codes",
+    "model_id",
+    "model_version",
+    "policy_version",
+    "feature_age_ms",
+    "fallback_used",
+    "decision_time",
+    "source_region",
+    "trace_id"
+  ],
+  "properties": {
+    "data_classification": {
+      "type": "string",
+      "const": "SYNTHETIC",
+      "description": "Marks this record as generated portfolio data."
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of this event contract."
+    },
+    "decision_id": {
+      "type": "string",
+      "pattern": "^dec_[A-Za-z0-9_-]+$",
+      "description": "Unique identity for this persisted decision."
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9_-]+$",
+      "description": "Payment event that was scored."
+    },
+    "payment_id": {
+      "type": "string",
+      "pattern": "^pay_[A-Za-z0-9_-]+$",
+      "description": "Logical payment this decision belongs to."
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "APPROVE",
+        "STEP_UP",
+        "REVIEW",
+        "DECLINE"
+      ],
+      "description": "Action recommendation from configured policy."
+    },
+    "risk_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Synthetic model/rules score; 0 is lower risk and 1 is higher risk."
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Stable machine-readable reasons for the action."
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Model or rules engine identifier."
+    },
+    "model_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Exact model/rules version used."
+    },
+    "policy_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Decision threshold and policy configuration version."
+    },
+    "feature_age_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Age of the oldest feature used, milliseconds."
+    },
+    "fallback_used": {
+      "type": "boolean",
+      "description": "True when the deterministic fallback replaced model inference."
+    },
+    "decision_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the decision was committed, UTC."
+    },
+    "source_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-gov)?-[a-z]+-\\d$",
+      "description": "Region that made the decision."
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$",
+      "description": "Correlation ID linking request, decision, and logs."
+    }
+  }
+}

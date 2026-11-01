@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sentinelpay.example/feature-update-v1.json",
+  "title": "FeatureUpdateV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "data_classification",
+    "schema_version",
+    "feature_event_id",
+    "entity_type",
+    "entity_token",
+    "feature_version",
+    "window_start",
+    "window_end",
+    "window_seconds",
+    "transaction_count",
+    "amount_sum",
+    "currency",
+    "distinct_merchant_count",
+    "new_device_count",
+    "computed_at",
+    "source_region"
+  ],
+  "properties": {
+    "data_classification": {
+      "type": "string",
+      "const": "SYNTHETIC",
+      "description": "Marks this record as generated portfolio data."
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of this event contract."
+    },
+    "feature_event_id": {
+      "type": "string",
+      "pattern": "^feat_[A-Za-z0-9_-]+$",
+      "description": "Unique identity for this feature snapshot."
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "ACCOUNT",
+        "PAYMENT_TOKEN",
+        "DEVICE",
+        "MERCHANT"
+      ],
+      "description": "Type of synthetic entity summarized."
+    },
+    "entity_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Synthetic token for the entity; not a direct identifier."
+    },
+    "feature_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the feature calculation logic."
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Inclusive start of the event-time aggregation window."
+    },
+    "window_end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Exclusive end of the event-time aggregation window."
+    },
+    "window_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 604800,
+      "description": "Length of the aggregation window in seconds."
+    },
+    "transaction_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of payments observed for this entity/window."
+    },
+    "amount_sum": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Sum of amounts in the currency field for this window."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Currency for amount_sum; do not add unlike currencies."
+    },
+    "distinct_merchant_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of distinct synthetic merchants in the window."
+    },
+    "new_device_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of first-seen devices in the window."
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this feature snapshot was computed, UTC."
+    },
+    "source_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-gov)?-[a-z]+-\\d$",
+      "description": "Region that computed the feature."
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "data_classification": "SYNTHETIC",
+  "schema_version": 1,
+  "feature_event_id": "feat_00000001",
+  "entity_type": "ACCOUNT",
+  "entity_token": "atok_0003",
+  "feature_version": 1,
+  "window_start": "2026-01-01T09:15:00.000Z",
+  "window_end": "2026-01-01T10:15:00.000Z",
+  "window_seconds": 3600,
+  "transaction_count": 4,
+  "amount_sum": 412.75,
+  "currency": "USD",
+  "distinct_merchant_count": 2,
+  "new_device_count": 1,
+  "computed_at": "2026-01-01T10:15:01.000Z",
+  "source_region": "us-east-1"
+}
