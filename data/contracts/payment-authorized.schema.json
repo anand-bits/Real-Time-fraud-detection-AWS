@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sentinelpay.example/payment-authorized-v1.json",
+  "title": "PaymentAuthorizedV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "data_classification",
+    "schema_version",
+    "event_id",
+    "payment_id",
+    "idempotency_key",
+    "event_time",
+    "received_at",
+    "payment_token",
+    "account_token",
+    "merchant_id",
+    "device_token",
+    "amount",
+    "currency",
+    "channel",
+    "country_code",
+    "device_first_seen_days",
+    "source_region",
+    "trace_id"
+  ],
+  "properties": {
+    "data_classification": {
+      "type": "string",
+      "const": "SYNTHETIC",
+      "description": "Marks this record as generated portfolio data."
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of this event contract."
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9_-]+$",
+      "description": "Unique event identity; a redelivery repeats the same value."
+    },
+    "payment_id": {
+      "type": "string",
+      "pattern": "^pay_[A-Za-z0-9_-]+$",
+      "description": "Stable synthetic payment identity."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^idem_[A-Za-z0-9_-]+$",
+      "description": "Key used to prevent duplicate decisions for the same logical request."
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the payment happened at the source, UTC."
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the system received the event, UTC; used to observe late arrivals."
+    },
+    "payment_token": {
+      "type": "string",
+      "pattern": "^ptok_[A-Za-z0-9_-]+$",
+      "description": "Synthetic token for the payment instrument; never a PAN."
+    },
+    "account_token": {
+      "type": "string",
+      "pattern": "^atok_[A-Za-z0-9_-]+$",
+      "description": "Synthetic stable account token for velocity features."
+    },
+    "merchant_id": {
+      "type": "string",
+      "pattern": "^mer_[A-Za-z0-9_-]+$",
+      "description": "Synthetic merchant identifier."
+    },
+    "device_token": {
+      "type": "string",
+      "pattern": "^dtok_[A-Za-z0-9_-]+$",
+      "description": "Synthetic device token."
+    },
+    "amount": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000000,
+      "description": "Amount in major currency units, e.g. 12.34."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Three-letter currency code; amounts are not mixed across currencies."
+    },
+    "channel": {
+      "type": "string",
+      "const": "CARD_NOT_PRESENT",
+      "description": "Payment channel used by this project scenario."
+    },
+    "country_code": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "Synthetic two-letter country code; not a raw IP address."
+    },
+    "device_first_seen_days": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3650,
+      "description": "Age of the device in days; zero means first seen today."
+    },
+    "source_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-gov)?-[a-z]+-\\d$",
+      "description": "AWS Region label where the event entered the demo."
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$",
+      "description": "Synthetic trace correlation ID."
+    }
+  }
+}

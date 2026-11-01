@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sentinelpay.example/chargeback-outcome-v1.json",
+  "title": "ChargebackOutcomeV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "data_classification",
+    "schema_version",
+    "outcome_event_id",
+    "payment_id",
+    "outcome",
+    "outcome_source",
+    "payment_event_time",
+    "label_observed_at",
+    "source_region",
+    "trace_id"
+  ],
+  "properties": {
+    "data_classification": {
+      "type": "string",
+      "const": "SYNTHETIC",
+      "description": "Marks this record as generated portfolio data."
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of this event contract."
+    },
+    "outcome_event_id": {
+      "type": "string",
+      "pattern": "^out_[A-Za-z0-9_-]+$",
+      "description": "Unique identity for the delayed outcome record."
+    },
+    "payment_id": {
+      "type": "string",
+      "pattern": "^pay_[A-Za-z0-9_-]+$",
+      "description": "Payment to which the outcome applies."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "CONFIRMED_FRAUD",
+        "NO_FRAUD"
+      ],
+      "description": "Synthetic matured label; kept separate from the original payment event."
+    },
+    "outcome_source": {
+      "type": "string",
+      "const": "SYNTHETIC_LABEL_GENERATOR",
+      "description": "Identifies that the label is generated, not from a real processor."
+    },
+    "payment_event_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Original payment event time, UTC."
+    },
+    "label_observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the simulator makes this outcome available, UTC."
+    },
+    "source_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-gov)?-[a-z]+-\\d$",
+      "description": "Region where the simulated outcome was emitted."
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$",
+      "description": "Synthetic correlation ID."
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "data_classification": "SYNTHETIC",
+  "schema_version": 1,
+  "outcome_event_id": "out_00000001",
+  "payment_id": "pay_00000001",
+  "outcome": "CONFIRMED_FRAUD",
+  "outcome_source": "SYNTHETIC_LABEL_GENERATOR",
+  "payment_event_time": "2026-01-01T10:15:00.000Z",
+  "label_observed_at": "2026-01-31T10:15:00.000Z",
+  "source_region": "us-east-1",
+  "trace_id": "00000000000050008000000000000001"
+}

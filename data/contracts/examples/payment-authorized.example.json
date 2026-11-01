@@ -1,0 +1,20 @@
+{
+  "data_classification": "SYNTHETIC",
+  "schema_version": 1,
+  "event_id": "evt_00000001",
+  "payment_id": "pay_00000001",
+  "idempotency_key": "idem_00000001",
+  "event_time": "2026-01-01T10:15:00.000Z",
+  "received_at": "2026-01-01T10:15:01.000Z",
+  "payment_token": "ptok_0007",
+  "account_token": "atok_0003",
+  "merchant_id": "mer_0004",
+  "device_token": "dtok_0012",
+  "amount": 84.5,
+  "currency": "USD",
+  "channel": "CARD_NOT_PRESENT",
+  "country_code": "US",
+  "device_first_seen_days": 0,
+  "source_region": "us-east-1",
+  "trace_id": "00000000000050008000000000000001"
+}

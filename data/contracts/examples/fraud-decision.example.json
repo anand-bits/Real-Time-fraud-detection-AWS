@@ -1,0 +1,21 @@
+{
+  "data_classification": "SYNTHETIC",
+  "schema_version": 1,
+  "decision_id": "dec_00000001",
+  "event_id": "evt_00000001",
+  "payment_id": "pay_00000001",
+  "decision": "STEP_UP",
+  "risk_score": 0.72,
+  "reason_codes": [
+    "NEW_DEVICE",
+    "VELOCITY_5M"
+  ],
+  "model_id": "sentinelpay-rules",
+  "model_version": "rules-v1",
+  "policy_version": "policy-v1",
+  "feature_age_ms": 450,
+  "fallback_used": false,
+  "decision_time": "2026-01-01T10:15:01.120Z",
+  "source_region": "us-east-1",
+  "trace_id": "00000000000050008000000000000001"
+}
