@@ -1,12 +1,12 @@
 flowchart LR
   PAY["Payment networks / merchant apps\nTokenized payment events"] --> EDGE["AWS Global Accelerator + Route 53\nhealth checks, region steering"]
 
-  subgraph PROD_A["PCI production account • Region A • active"]
+  subgraph PROD_A["Serving environment • Region A • single-Region baseline"]
     direction TB
     APIA["Amazon API Gateway\nWAF + request limits"] --> AUTH_A["Fraud decision service\nLambda • deadline • fallback policy"]
-    AUTH_A --> FEAT_A["DynamoDB Global Tables\nMREC online risk features"]
+    AUTH_A --> FEAT_A["DynamoDB online features\nlocal table baseline • MREC lab optional"]
     AUTH_A --> MODEL_A["SageMaker real-time endpoint\nchampion / canary model"]
-    AUTH_A --> LEDGER_A["DynamoDB decision + idempotency ledger\nconditional writes • tokenized keys"]
+    AUTH_A --> LEDGER_A["DynamoDB decision + idempotency ledger\nlocal table baseline • MRSC lab optional"]
     AUTH_A -->|stable event ID| STREAM_A["Kinesis Data Streams\nregional payment event log"]
     STREAM_A --> FLINK_A["Managed Service for Apache Flink\nvelocity windows • late events • rules"]
     FLINK_A --> FEAT_A
@@ -16,12 +16,12 @@ flowchart LR
     STREAM_A --> DLQ_A["SQS quarantine / replay\npoison events + audit"]
   end
 
-  subgraph PROD_B["PCI production account • Region B • active"]
+  subgraph PROD_B["Serving environment • Region B • optional resilience lab"]
     direction TB
     APIB["Amazon API Gateway\nWAF + request limits"] --> AUTH_B["Fraud decision service\nLambda • deadline • fallback policy"]
-    AUTH_B --> FEAT_B["DynamoDB Global Tables\nMREC online risk features"]
+    AUTH_B --> FEAT_B["DynamoDB online features\nlocal table baseline • MREC lab optional"]
     AUTH_B --> MODEL_B["SageMaker real-time endpoint\nchampion / canary model"]
-    AUTH_B --> LEDGER_B["DynamoDB decision + idempotency ledger\nconditional writes • tokenized keys"]
+    AUTH_B --> LEDGER_B["DynamoDB decision + idempotency ledger\nlocal table baseline • MRSC lab optional"]
     AUTH_B -->|stable event ID| STREAM_B["Kinesis Data Streams\nregional payment event log"]
     STREAM_B --> FLINK_B["Managed Service for Apache Flink\nvelocity windows • late events • rules"]
     FLINK_B --> FEAT_B
@@ -35,12 +35,12 @@ flowchart LR
   EDGE --> APIB
   AUTH_A -->|approve / decline / step-up| PAY
   AUTH_B -->|approve / decline / step-up| PAY
-  FEAT_A <-->|single-writer home-region routing\nversioned, idempotent features| FEAT_B
-  LEDGER_A <-->|DynamoDB MRSC\n2 replicas + witness Region C| LEDGER_B
-  FLINK_A -->|source-only relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_B
-  FLINK_B -->|source-only relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_A
+  FEAT_A <-->|optional MREC lab • one writer per entity\nversioned, idempotent features| FEAT_B
+  LEDGER_A <-->|optional MRSC comparison\n2 replicas + witness Region C| LEDGER_B
+  FLINK_A -->|optional regional relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_B
+  FLINK_B -->|optional regional relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_A
 
-  subgraph DATA["Data + model platform account"]
+  subgraph DATA["Data/model platform • same-account baseline; split optional"]
     direction TB
     RAW_A --> ICE["Glue Spark + Apache Iceberg\nbronze → silver → gold\nCDC + dedupe + reconciliation"]
     RAW_B --> ICE
@@ -55,9 +55,9 @@ flowchart LR
     ORCH --> TRAIN
   end
 
-  subgraph PLATFORM["Security, resilience, and operations • all accounts / Regions"]
+  subgraph PLATFORM["Security, resilience, and operations • portfolio baseline and optional Regions"]
     direction TB
-    SEC["Organizations + separate PCI / data / security accounts\nIAM least privilege • KMS multi-Region keys • PrivateLink\nCloudTrail • GuardDuty • Security Hub • Lake Formation"]
+    SEC["Personal portfolio controls: scoped IAM • KMS • private access\nCloudTrail • GuardDuty • Security Hub • Lake Formation\nSeparate accounts are an optional advanced exercise"]
     OBS["CloudWatch + X-Ray + OpenTelemetry\nlatency / fraud recall / false-positive / lag SLOs"]
     BUS["EventBridge incident bus → SNS / PagerDuty\nDLQ age • model fallback • replication lag • Flink checkpoints"]
     CICD["CI/CD with OIDC + Terraform\nunit / replay / load / chaos tests\nblue-green Flink + model deployment"]

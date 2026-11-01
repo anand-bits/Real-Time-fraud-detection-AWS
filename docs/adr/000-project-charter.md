@@ -1,6 +1,6 @@
 # ADR-000: SentinelPay project charter
 
-**Status:** Draft — portfolio assumptions, not company-approved business or compliance requirements  
+**Status:** Draft — personal portfolio assumptions to validate with tests  
 **Date:** 2026-11-01  
 **Owner:** Project author  
 **Decision scope:** Define the simulated fraud problem, decision boundary, success measures, and constraints before implementation.
@@ -91,7 +91,7 @@ Synthetic model metrics only show whether the implementation meets its generated
 - Choosing fraud thresholds on behalf of a real business.
 - Deploying continuously running multi-Region infrastructure before load and cost checks.
 
-## 9. Required reviewers and responsibilities
+## 9. Portfolio review roles and responsibilities
 
 For the portfolio, the project author simulates these roles and records review decisions:
 
@@ -101,7 +101,7 @@ For the portfolio, the project author simulates these roles and records review d
 - **Platform/on-call owner:** SLOs, alert routing, recovery and failover runbooks.
 - **Data/ML owner:** labels, leakage prevention, feature definitions, evaluation protocol, model approval.
 
-A company deployment requires named accountable owners and documented approval from the organization.
+These are design personas for the portfolio. No company review or approval is implied.
 
 ## 10. Step 1 exit criteria
 
@@ -114,4 +114,4 @@ Step 1 is complete when:
 5. Data restrictions and reviewer roles are acknowledged.
 6. These requirements are recorded as the baseline for architecture decisions and later tests.
 
-**Next step:** create ADRs for Region selection, MREC versus MRSC use, RTO/RPO, event retention, and serving-path latency budget. Do not provision the full multi-Region stack until those decisions and cost implications are reviewed.
+**Next step:** review ADRs 001–005 for Region selection, MREC versus MRSC, RTO/RPO, retention, and latency budget. Keep the multi-Region lab optional until its costs and measured tradeoffs are understood.
