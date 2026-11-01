@@ -1,89 +1,94 @@
-# SentinelPay — real-time financial fraud detection
+# SentinelPay — production-style real-time fraud detection portfolio
 
-> **Stage:** architecture and repository skeleton. Application, Terraform, and model implementation are intentionally not included yet. This README is the production-oriented build specification.
+> **Purpose:** Personal learning project and recruiter showcase. It demonstrates production engineering practices; it is not a company payment system, a PCI DSS implementation, or a production approval.
 
-SentinelPay scores tokenized payment requests in the authorization path and keeps evaluating behavior asynchronously. It combines regional inference, stateful streaming features, replayable events, an auditable decision ledger, and governed model releases.
-
-**Data boundary:** use synthetic/tokenized data only. Never store PAN, CVV, track data, credentials, or real customer data in source control, logs, fixtures, or the lake. This reference design is not a PCI DSS certification or production approval. Real use requires company security, privacy, legal, compliance, risk, and payment owners to approve the controls and policy. AWS describes PCI DSS responsibilities as shared in its [PCI DSS Security Reference Architecture](https://docs.aws.amazon.com/prescriptive-guidance/latest/aws-security-reference-architecture-pci-data-security-standard-dss/introduction.html).
+SentinelPay scores synthetic, tokenized card-not-present payment requests and evaluates behavior asynchronously. Use generated data only. Never put PAN, CVV, track data, credentials, or real customer records in source control, logs, fixtures, or the lake.
 
 ## Architecture
 
-![SentinelPay production architecture](architecture/financial-fraud-architecture.svg)
+![SentinelPay advanced target architecture](architecture/financial-fraud-architecture.svg)
 
-Editable diagram: [Mermaid source](architecture/financial-fraud-architecture.mmd)
+- [Editable target architecture](architecture/financial-fraud-architecture.mmd)
+- [Step 1 scope diagram](architecture/step-1-business-scope.svg)
+- [Step 1 charter](docs/adr/000-project-charter.md)
+- [Architecture decision records](docs/adr/)
 
-## Architecture intent
+The full diagram shows a production-style target. **Build and deploy a single-Region baseline first.** Region B, cross-Region replication, and the MRSC witness are optional, time-boxed labs. The diagram does not mean these resources are implemented or deployed.
 
-- **Two active serving Regions:** Global Accelerator and Route 53 steer tokenized requests to API Gateway/WAF and a regional decision service. The service reads local risk features, invokes a regional SageMaker endpoint, writes an idempotent decision, and returns approve/decline/step-up within an explicit deadline. Risk owners define fallback behavior and decision policy.
-- **Stream path:** Kinesis Data Streams is the replayable payment event log. Managed Apache Flink computes event-time velocity windows, handles late records, evaluates streaming rules, and updates online features. Firehose lands raw events in S3. Invalid or poison events go to encrypted quarantine with audited redrive.
-- **Online features:** DynamoDB Global Tables MREC hold versioned features. Each payment-instrument partition has one writer Region; failover fences that writer before promotion. A separate DynamoDB MRSC table is drawn for decision/idempotency keys when zero-RPO consistency is required. MRSC adds cross-Region write/read latency, requires exactly three Regions (two replicas plus a witness is supported), cannot span Region sets, and does not support TTL or transaction APIs. Benchmark it in the authorization path; if the cost/latency does not fit, assess an MREC ledger with an explicitly accepted RPO. Review [DynamoDB design guidance](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-global-table-design.html) and the [deployment checklist](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-global-table-design.prescriptive-guidance.checklist-and-faq.html) before choosing Regions.
-- **Lakehouse:** S3 stores immutable source events and Iceberg bronze/silver/gold data. Glue Spark handles schema normalization, CDC, deduplication, reconciliation, and historical rebuilds. Glue Catalog and Lake Formation govern access. Athena is the default investigation query path; Redshift Serverless is optional.
-- **ML lifecycle:** SageMaker Pipelines make point-in-time training data and evaluate temporal backtests, leakage, calibration, fairness, and drift. Model Registry approval gates champion/challenger canaries and rollback ([Model Registry docs](https://docs.aws.amazon.com/sagemaker/latest/dg/model-registry.html)).
-- **Company controls:** separate PCI-serving, data-platform, and security/log-archive accounts; IAM least privilege; regional KMS keys; private service access; central audit logs; CloudWatch/X-Ray/OpenTelemetry; and CI/CD with short-lived OIDC identity. Final controls must match company policy.
+## What the project demonstrates
 
-Kinesis enhanced fan-out can isolate read capacity for multiple independent consumers. Select it from measured load and regional support ([AWS documentation](https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html)).
+- **Authorization:** API Gateway/WAF, bounded decision service, local feature lookup, SageMaker inference, rules fallback, idempotent result, and stable event key.
+- **Streaming:** Kinesis Data Streams, Managed Apache Flink event-time windows, late-event handling, quarantine, and controlled replay.
+- **Lakehouse:** S3 and Iceberg bronze/silver/gold tables, Glue transformations/catalog, reconciliation, and Athena investigation. Redshift Serverless is optional.
+- **ML lifecycle:** point-in-time training, leakage checks, temporal evaluation, calibration/fairness/drift review, model registry, canary, and rollback.
+- **Operations:** Terraform, least-privilege roles, encryption, observability, CI, runbooks, load tests, and failure exercises.
 
-## Production build requirements
+## Personal-project deployment strategy
 
-### Business policy and data correctness
+1. Use one Region and one sandbox account for the baseline. Keep Region names in local configuration, not application code or committed files.
+2. Use regional DynamoDB tables first. Compare MREC and MRSC only in optional experiments.
+3. Estimate the temporary multi-Region lab cost before creating Region B or a witness; tear it down after the test.
+4. Start with small synthetic workloads, set budget/anomaly alerts, and stop SageMaker endpoints when not testing.
+5. Describe only behavior that was actually built and measured.
 
-- Define fraud classes, decision owners, permitted actions, step-up flow, review queue, chargeback outcomes, and appeals. Risk/compliance owners set targets for fraud loss, recall, false positives, customer friction, latency, and reviewer capacity.
-- Define model-timeout, stale-feature, stream-lag, Region-failover, and dependency-outage fallbacks. Record model/policy version, reason codes, and rule hits for each decision.
-- Versioned payment contract: stable event_id/idempotency key, schema version, tokenized payment/account IDs, merchant/device IDs, amount/currency, event and receive timestamps, source Region, trace ID. Define correction, deletion, retention, and delayed-label semantics.
-- Assume at-least-once delivery: all consumers/sinks must be replay-safe and idempotent. Do not claim end-to-end exactly-once processing.
-- Partition by a stable entity key; test hot-key skew. Specify event-time windows, watermarks, late-event handling, Flink state bounds, and replay horizon.
-- Treat chargebacks as delayed labels and prevent future data leakage in historical training sets.
-- Reconcile accepted/rejected/duplicate counts, decisions, checkpoints, and lake totals. A replay must reproduce business state with a traceable report.
+## Production-style build requirements
 
-### Availability and operations
+### Scope and correctness
 
-- Set stage latency budgets for API, decision service, online reads, inference, idempotency write, and payment response. Measure p50/p95/p99 at normal, peak, burst, and degraded load.
-- Define SLOs for availability, decision latency, feature freshness, stream lag, Flink checkpoints/backpressure, DynamoDB replication/throttles, DLQ age, and model fallback.
-- Test Region evacuation, writer fencing, stale/duplicate input, throttling, KMS denial, model failure, partial account outage, and Flink checkpoint recovery.
-- Set RTO/RPO per dataset and decision type. Preserve source sequence and raw events for rebuild/reconciliation. Define retention and legal-hold rules before S3 Object Lock.
-- Runbooks: replay/redrive, Region evacuation, model rollback, stale features, key rotation, and evidence collection. Every alert has an owner, response policy, runbook, and tested delivery.
+- Simulate card-not-present authorizations and return APPROVE, STEP_UP, REVIEW, or DECLINE.
+- Define versioned payment, decision, feature, and delayed-outcome schemas with stable event IDs/idempotency keys.
+- Generate duplicates, late/out-of-order events, hot keys, malformed records, corrections, and delayed labels.
+- Assume at-least-once delivery. Make consumers replay-safe; do not claim end-to-end exactly-once processing.
+- Keep event time and label-observed time separate to prevent future-label leakage.
+- Reconcile source, accepted/rejected/duplicate, decision, checkpoint, and lakehouse counts.
+
+### Serving and resilience
+
+- Use the charter’s p99 ≤500 ms at 100 requests/second for 30 minutes as an initial synthetic load target, not a provider guarantee.
+- Keep Flink and lakehouse writes asynchronous to the response. Bound calls and retries.
+- Fall back to deterministic rules when inference fails or features are stale; persist reason codes and fallback status.
+- Test component restart, throttling, model timeout, stale features, replay, and reconciliation. Region evacuation is an optional lab.
+- Publish measured p50/p95/p99, errors, feature age, lag, checkpoint behavior, and recovery results.
 
 ### Security and model governance
 
-- Keep cardholder data out of scope where possible; tokenize at the boundary. Classify data and define token scope, access, retention, and deletion.
-- Isolate accounts/VPCs; require TLS, KMS encryption, short-lived roles, least privilege, permission boundaries, and reviewed cross-account/resource policies.
-- Centralize CloudTrail and protect audit integrity. Restrict logs, model artifacts, feature histories, and analyst access. Secrets belong in Secrets Manager/Parameter Store, never Git or Terraform state.
-- Define Lake Formation row/column grants. Use synthetic CI fixtures. Threat-model ingress, tokenization, replay, model artifacts, CI identity, and cross-account trust; scan dependencies, images, and IaC.
-- Use leakage-safe temporal splits and reproducible features. Measure business-selected precision/recall, calibration, segment error, and drift against rules-only and challenger baselines.
-- Track data lineage, code/image and model digests, evaluation report, approver, deployment version, and rollback target. Promotion: offline evaluation → shadow → canary → wider rollout. Retraining must never auto-deploy.
-- Implement fallback and stale-feature policy in the serving path, not only dashboards.
+- Synthetic data only; no cardholder data or secrets in Git, logs, fixtures, or screenshots.
+- Use TLS, encryption, short-lived credentials, scoped IAM, private endpoints where useful, and protected Terraform state.
+- Keep S3 Object Lock off unless deliberately testing its retention and teardown consequences.
+- Use temporal splits; compare the model to a rules-only baseline. Report precision/recall, calibration, segment errors, and synthetic-data limitations.
+- Require model evaluation and an explicit approval step before canary deployment. Demonstrate rollback; never auto-deploy a retrained model.
 
-### Cost and capacity
+## Cost controls
 
-Continuous active Regions, the MRSC witness, inference capacity, Flink, global tables, stream retention, audit logging, and analytics can be expensive. Set budgets/anomaly alerts before deployment. Start with small synthetic workloads, run scale tests in short windows, keep Redshift optional, and shut nonproduction capacity down after exercises. Estimate costs from region and measured throughput before sustained use.
+Continuous multi-Region serving, an MRSC witness, Flink, global tables, and SageMaker endpoints can be expensive. The default build is single-Region and time-boxed. Keep Redshift optional, run scale tests briefly, and verify teardown after each cloud exercise.
 
 ## Repository layout
 
     .
     ├── readme.md
-    ├── architecture/                 # this editable and rendered diagram
-    ├── ci/                           # pipeline, policy checks, build metadata
+    ├── architecture/                 # rendered SVG and editable Mermaid diagrams
+    ├── ci/                           # validation and policy checks
     ├── data/
-    │   ├── contracts/                # versioned schemas
-    │   └── synthetic/                # generators and safe fixtures
+    │   ├── contracts/                # versioned event schemas
+    │   └── synthetic/                # deterministic safe fixtures
     ├── docs/
-    │   ├── adr/                      # architecture decisions
-    │   ├── data-contracts/           # ownership, quality, retention
-    │   └── runbooks/                 # recovery procedures
-    ├── infra/terraform/modules/      # reusable account/Region modules
+    │   ├── adr/                      # charter and architecture decisions
+    │   ├── data-contracts/
+    │   └── runbooks/
+    ├── infra/terraform/modules/      # small reusable modules
     ├── ml/
-    │   ├── evaluation/               # leakage, calibration, fairness, drift
-    │   └── pipelines/                # feature/train/register/deploy
+    │   ├── evaluation/
+    │   └── pipelines/
     ├── ops/
     │   ├── alerts/
     │   ├── dashboards/
     │   └── runbooks/
-    ├── scripts/                      # local and controlled replay tools
+    ├── scripts/
     ├── src/
-    │   ├── decision-api/             # synchronous score and fallback
-    │   ├── feature-pipeline/         # online feature contract/update
-    │   ├── replay/                   # bounded audited redrive
-    │   └── stream-processing/flink/  # velocity and streaming rules
+    │   ├── decision-api/
+    │   ├── feature-pipeline/
+    │   ├── replay/
+    │   └── stream-processing/flink/
     └── tests/
         ├── chaos/
         ├── contract/
@@ -91,28 +96,30 @@ Continuous active Regions, the MRSC witness, inference capacity, Flink, global t
         ├── load/
         └── unit/
 
-Everything except this README and architecture files is a placeholder. Never commit credentials, account-specific state, real customer data, or Terraform state.
+Implementation folders are placeholders. Never commit credentials, account-specific state, Terraform state, or non-synthetic payment data.
 
 ## Build order
 
-1. **Requirements/ADRs:** decide risk policy, SLO, data class, retention, Region set, RTO/RPO, and MRSC-vs-MREC.
-2. **Contracts/synthetic events:** implement payment, decision, feature, delayed-label schemas; generate skew, duplicates, late, malformed, and corrected events.
-3. **Regional vertical slice:** tokenized ingress, bounded decisions, idempotency, Kinesis, Flink, quarantine, local replay.
-4. **Lakehouse/ML:** immutable landing, Iceberg tables, reconciliation, point-in-time features, temporal evaluation, model registration.
-5. **Security/CI:** account boundaries, Terraform state, OIDC, policy scanning, artifact provenance, isolated test environments.
-6. **Second Region/witness:** add after first Region load results; verify MRSC region compatibility and recovery.
-7. **Production exercises:** load, chaos, failover, delayed-label, replay, rollback, and incident drills; publish results/runbooks.
+1. Finalize the charter and review ADRs 001–005.
+2. Define contracts and deterministic synthetic data.
+3. Build the local rules baseline and replay/idempotency tests.
+4. Implement the one-Region AWS vertical slice.
+5. Add Flink velocity features, quarantine, and replay.
+6. Build Iceberg/Glue tables and reconciliation.
+7. Add point-in-time ML evaluation and model registry/canary/rollback.
+8. Add security controls, CI, dashboards, alerts, and runbooks.
+9. Run bounded load/failure tests and publish results.
+10. Optionally compare multi-Region MREC/MRSC behavior and costs, then tear down the lab.
 
-## Gates before any production claim
+## Portfolio quality gates
 
-- Owners approve architecture, threat model, classification, and security/compliance review.
-- No real cardholder data in portfolio assets, fixtures, logs, or screenshots.
-- Contract, idempotency, late-event, correction, replay, reconciliation tests pass reproducibly.
-- Load and failure tests meet agreed latency/error budgets.
-- Region evacuation and writer fencing meet documented RTO/RPO.
-- Model approval and rollback work end to end.
-- An independent operator follows the runbooks successfully.
-- Terraform plans, security scans, budgets, teardown, and recovery procedures are reviewed.
+- No real cardholder/customer data or secrets.
+- Repeated replay produces the same final decision state.
+- Delayed-label evaluation shows no future leakage.
+- Load-test results include measured latency distributions and failures.
+- Recovery and rollback results are documented for components actually tested.
+- Cost notes distinguish the baseline from optional advanced services.
+- Recruiter-facing claims match the evidence and state synthetic-data limitations.
 
 ## AWS references
 
@@ -122,4 +129,3 @@ Everything except this README and architecture files is a placeholder. Never com
 - [Managed Service for Apache Flink](https://docs.aws.amazon.com/managed-flink/)
 - [AWS Glue Iceberg support](https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-format-iceberg.html)
 - [SageMaker Model Registry](https://docs.aws.amazon.com/sagemaker/latest/dg/model-registry.html)
-- [AWS PCI DSS Security Reference Architecture](https://docs.aws.amazon.com/prescriptive-guidance/latest/aws-security-reference-architecture-pci-data-security-standard-dss/introduction.html)
