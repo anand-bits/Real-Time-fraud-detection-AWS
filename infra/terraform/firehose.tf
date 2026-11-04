@@ -11,7 +11,7 @@ resource "aws_kinesis_firehose_delivery_stream" "payments_to_s3" {
     role_arn   = aws_iam_role.firehose_delivery.arn
     bucket_arn = aws_s3_bucket.raw.arn
 
-    prefix              = "raw/payments/"
+    prefix              = "raw/payments/ingest_date=!{timestamp:yyyy-MM-dd}/batch_id=streaming/"
     error_output_prefix = "errors/!{firehose:error-output-type}/!{timestamp:yyyy/MM/dd/HH}/"
 
     buffering_size     = 1
