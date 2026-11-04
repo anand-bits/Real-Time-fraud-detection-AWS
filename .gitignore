@@ -1,0 +1,9 @@
+# Terraform working directory and downloaded provider binaries
+**/.terraform/
+
+# Terraform state may contain secrets and is environment-specific
+*.tfstate
+*.tfstate.*
+
+# macOS metadata
+.DS_Store
