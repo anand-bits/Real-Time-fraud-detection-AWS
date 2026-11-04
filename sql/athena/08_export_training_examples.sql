@@ -2,17 +2,25 @@
 -- UNLOAD requires the destination prefix to be empty/nonexistent.
 UNLOAD (
     SELECT payment_id,
+           event_id,
+           event_date,
            event_time,
+           received_at,
            amount,
+           currency,
+           channel,
+           country_code,
            device_first_seen_days,
            transaction_count_1h,
            amount_sum_1h,
            distinct_merchant_count_1h,
            new_device_count_1h,
-           currency,
-           channel,
-           country_code,
+           feature_computed_at,
+           label,
            label_fraud,
+           label_observed_at,
+           label_delay_days,
+           dataset_version,
            dataset_split
     FROM training_examples_gold
 )

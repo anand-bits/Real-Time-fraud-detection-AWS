@@ -13,7 +13,8 @@ Run the files one at a time in this order in the Athena workgroup and database `
 9. `03_gold_*.sql` — check split sizes, date coverage, and split overlap.
 10. `04_create_pipeline_audit.sql`, `04_merge_pipeline_audit.sql` — create and populate batch reconciliation history.
 11. `06_pipeline_audit.sql` and `07_pipeline_audit_failures.sql` — inspect audit results.
-12. `08_export_training_examples.sql` — optional Parquet export for local baseline training.
+12. `05_streaming_*.sql` — verify the 21-event Firehose smoke batch, Silver matches, and streaming audit row. Update the date if using another ingestion day.
+13. `08_export_training_examples.sql` — optional Parquet export for local baseline training.
 
 The SQL here combines the statements visible in Athena history with the project contracts and the resulting schema/counts to provide a complete ordered set. Check the S3 bucket and database names before running it in another account. The `CREATE TABLE IF NOT EXISTS` statements do not replace or alter existing tables; for a rebuild, use a clean database or explicitly migrate the existing tables after checking their catalog definitions.
 
