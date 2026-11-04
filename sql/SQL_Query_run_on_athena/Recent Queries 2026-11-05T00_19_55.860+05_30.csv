@@ -1,0 +1,1284 @@
+Execution ID,Query,Start time,Status,Run time,Data scanned,Query engine version used,Encryption
+a18fb7bf-71db-46a5-98c8-ade13acb066f,"UNLOAD (
+  SELECT
+    payment_id,
+    event_id,
+    event_date,
+    event_time,
+    received_at,
+    amount,
+    currency,
+    channel,
+    country_code,
+    device_first_seen_days,
+    transaction_count_1h,
+    amount_sum_1h,
+    distinct_merchant_count_1h,
+    new_device_count_1h,
+    feature_computed_at,
+    label,
+    label_fraud,
+    label_observed_at,
+    label_delay_days,
+    dataset_version,
+    dataset_split
+  FROM sentinelpay.training_examples_gold
+)
+TO 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/ml/training_exports/export_id=20261104-v1/'
+WITH (
+  format = 'PARQUET',
+  compression = 'SNAPPY',
+  partitioned_by = ARRAY['dataset_split']
+)",2026-11-05T00:00:24.086+05:30,SUCCEEDED,1.862 sec,1.26 MB,Athena engine version 3,
+0b8effce-dcd8-4489-9171-a0e6f9b4e517,"SELECT batch_id, event_type, bronze_record_count,
+       unique_business_ids, duplicate_delivery_count, reconciliation_status
+FROM sentinelpay.pipeline_audit
+WHERE batch_id = 'streaming'
+  AND event_type = 'payments'",2026-11-04T23:52:55.202+05:30,SUCCEEDED,834 ms,0.38 KB,Athena engine version 3,
+4392b284-848c-44af-a42b-df33c06d0e84,"MERGE INTO sentinelpay.pipeline_audit AS t
+USING (
+  SELECT
+    ingest_date,
+    batch_id,
+    'payments' AS event_type,
+    count(*) AS bronze_record_count,
+    count(DISTINCT event_id) AS unique_business_ids,
+    count(*) - count(DISTINCT event_id) AS duplicate_delivery_count,
+    CASE
+      WHEN count(DISTINCT event_id) = 0 THEN 'FAIL'
+      WHEN count(*) > count(DISTINCT event_id) THEN 'PASS_WITH_DEDUP'
+      ELSE 'PASS'
+    END AS reconciliation_status,
+    CAST(current_timestamp AS varchar) AS evaluated_at
+  FROM sentinelpay.payments_bronze
+  WHERE ingest_date = '2026-11-04'
+    AND batch_id = 'streaming'
+  GROUP BY ingest_date, batch_id
+) AS s
+ON t.ingest_date = s.ingest_date
+AND t.batch_id = s.batch_id
+AND t.event_type = s.event_type
+WHEN MATCHED THEN UPDATE SET
+  bronze_record_count = s.bronze_record_count,
+  unique_business_ids = s.unique_business_ids,
+  duplicate_delivery_count = s.duplicate_delivery_count,
+  reconciliation_status = s.reconciliation_status,
+  evaluated_at = s.evaluated_at
+WHEN NOT MATCHED THEN INSERT (
+  ingest_date, batch_id, event_type, bronze_record_count,
+  unique_business_ids, duplicate_delivery_count,
+  reconciliation_status, evaluated_at
+) VALUES (
+  s.ingest_date, s.batch_id, s.event_type, s.bronze_record_count,
+  s.unique_business_ids, s.duplicate_delivery_count,
+  s.reconciliation_status, s.evaluated_at
+)",2026-11-04T23:52:48.636+05:30,SUCCEEDED,1.497 sec,2.89 KB,Athena engine version 3,
+f1353bf2-8fa5-47d5-b638-4c6fc6f9e087,"SELECT count(DISTINCT s.event_id) AS stream_events,
+       count(DISTINCT p.event_id) AS matched_in_silver
+FROM sentinelpay.payments_bronze s
+LEFT JOIN sentinelpay.payments_iceberg p
+  ON p.event_id = s.event_id
+WHERE s.ingest_date = '2026-11-04'
+  AND s.batch_id = 'streaming'",2026-11-04T23:52:00.744+05:30,SUCCEEDED,754 ms,163.42 KB,Athena engine version 3,
+9a761839-acd3-4b85-a774-04920c37bd4d,"MERGE INTO sentinelpay.payments_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, event_id, payment_id,
+    idempotency_key, event_time, received_at, payment_token,
+    account_token, merchant_id, device_token, amount, currency,
+    channel, country_code, device_first_seen_days, source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, event_id, payment_id,
+      idempotency_key, event_time, received_at, payment_token,
+      account_token, merchant_id, device_token, amount, currency,
+      channel, country_code, device_first_seen_days, source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY event_id
+        ORDER BY received_at, payment_id
+      ) AS rn
+    FROM sentinelpay.payments_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id = 'streaming'
+  )
+  WHERE rn = 1
+) AS s
+ON t.event_id = s.event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, event_id, payment_id,
+  idempotency_key, event_time, received_at, payment_token,
+  account_token, merchant_id, device_token, amount, currency,
+  channel, country_code, device_first_seen_days, source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.event_id, s.payment_id,
+  s.idempotency_key, s.event_time, s.received_at, s.payment_token,
+  s.account_token, s.merchant_id, s.device_token, s.amount, s.currency,
+  s.channel, s.country_code, s.device_first_seen_days, s.source_region, s.trace_id
+)",2026-11-04T23:51:53.046+05:30,SUCCEEDED,1.102 sec,163.42 KB,Athena engine version 3,
+1df5cb9b-8b4d-4a95-9a71-1824a4892b58,"SELECT count(*) AS records,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id = 'streaming'",2026-11-04T23:51:06.541+05:30,SUCCEEDED,488 ms,2.79 KB,Athena engine version 3,
+6c75a67a-b7a7-418d-80cc-ce405778cc52,MSCK REPAIR TABLE sentinelpay.payments_bronze,2026-11-04T23:50:59.500+05:30,SUCCEEDED,1.034 sec,0 MB,Athena engine version 3,
+629237f4-32ea-4c60-9173-b9e6ed00f2ea,"SELECT batch_id, event_type, bronze_record_count,
+       unique_business_ids, duplicate_delivery_count, reconciliation_status
+FROM sentinelpay.pipeline_audit
+ORDER BY batch_id, event_type",2026-11-04T23:35:06.089+05:30,SUCCEEDED,542 ms,0.62 KB,Athena engine version 3,
+68c2def6-42c7-4006-a5be-95c45bb8d913,"MERGE INTO sentinelpay.pipeline_audit AS t
+USING (
+  SELECT
+    ingest_date,
+    batch_id,
+    event_type,
+    record_count AS bronze_record_count,
+    unique_ids AS unique_business_ids,
+    record_count - unique_ids AS duplicate_delivery_count,
+    CASE
+      WHEN unique_ids = 0 THEN 'FAIL'
+      WHEN record_count > unique_ids THEN 'PASS_WITH_DEDUP'
+      ELSE 'PASS'
+    END AS reconciliation_status,
+    CAST(current_timestamp AS varchar) AS evaluated_at
+  FROM (
+    SELECT ingest_date, batch_id, 'payments' AS event_type,
+           count(*) AS record_count, count(DISTINCT event_id) AS unique_ids
+    FROM sentinelpay.payments_bronze
+    GROUP BY ingest_date, batch_id
+
+    UNION ALL
+
+    SELECT ingest_date, batch_id, 'feature_updates',
+           count(*), count(DISTINCT feature_event_id)
+    FROM sentinelpay.feature_updates_bronze
+    GROUP BY ingest_date, batch_id
+
+    UNION ALL
+
+    SELECT ingest_date, batch_id, 'fraud_decisions',
+           count(*), count(DISTINCT decision_id)
+    FROM sentinelpay.fraud_decisions_bronze
+    GROUP BY ingest_date, batch_id
+
+    UNION ALL
+
+    SELECT ingest_date, batch_id, 'chargeback_outcomes',
+           count(*), count(DISTINCT outcome_event_id)
+    FROM sentinelpay.chargeback_outcomes_bronze
+    GROUP BY ingest_date, batch_id
+  )
+) AS s
+ON t.ingest_date = s.ingest_date
+AND t.batch_id = s.batch_id
+AND t.event_type = s.event_type
+WHEN MATCHED THEN UPDATE SET
+  bronze_record_count = s.bronze_record_count,
+  unique_business_ids = s.unique_business_ids,
+  duplicate_delivery_count = s.duplicate_delivery_count,
+  reconciliation_status = s.reconciliation_status,
+  evaluated_at = s.evaluated_at
+WHEN NOT MATCHED THEN INSERT (
+  ingest_date, batch_id, event_type, bronze_record_count,
+  unique_business_ids, duplicate_delivery_count,
+  reconciliation_status, evaluated_at
+) VALUES (
+  s.ingest_date, s.batch_id, s.event_type, s.bronze_record_count,
+  s.unique_business_ids, s.duplicate_delivery_count,
+  s.reconciliation_status, s.evaluated_at
+)",2026-11-04T23:34:59.701+05:30,SUCCEEDED,1.933 sec,2.51 MB,Athena engine version 3,
+64a69bcb-be69-4302-8376-e3e8276203d6,"CREATE TABLE sentinelpay.pipeline_audit ( ingest_date string, batch_id string, event_type string, bronze_record_count bigint, unique_business_ids bigint, duplicate_delivery_count bigint, reconciliation_status string, evaluated_at string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/ops/pipeline_audit/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T23:34:50.302+05:30,SUCCEEDED,375 ms,0 MB,Athena engine version 3,
+665fa6d2-22e1-47d8-95b9-9c8b6a7d7a24,"SELECT sum(payment_count) AS payments,
+       sum(confirmed_fraud_count) AS confirmed_fraud,
+       sum(no_fraud_count) AS no_fraud
+FROM sentinelpay.fraud_daily_metrics_gold",2026-11-04T23:33:36.568+05:30,SUCCEEDED,625 ms,0.40 KB,Athena engine version 3,
+8c78bf26-f639-415e-a4f7-fae86587ade7,"MERGE INTO sentinelpay.fraud_daily_metrics_gold AS t
+USING (
+  SELECT
+    event_date,
+    dataset_split,
+    currency,
+    count(*) AS payment_count,
+    sum(label_fraud) AS confirmed_fraud_count,
+    count(*) - sum(label_fraud) AS no_fraud_count,
+    cast(sum(label_fraud) AS double) / count(*) AS fraud_rate,
+    sum(amount) AS total_amount,
+    avg(amount) AS average_amount
+  FROM sentinelpay.training_examples_gold
+  GROUP BY event_date, dataset_split, currency
+) AS s
+ON t.event_date = s.event_date
+AND t.dataset_split = s.dataset_split
+AND t.currency = s.currency
+WHEN MATCHED THEN UPDATE SET
+  payment_count = s.payment_count,
+  confirmed_fraud_count = s.confirmed_fraud_count,
+  no_fraud_count = s.no_fraud_count,
+  fraud_rate = s.fraud_rate,
+  total_amount = s.total_amount,
+  average_amount = s.average_amount
+WHEN NOT MATCHED THEN INSERT (
+  event_date, dataset_split, currency, payment_count,
+  confirmed_fraud_count, no_fraud_count, fraud_rate,
+  total_amount, average_amount
+) VALUES (
+  s.event_date, s.dataset_split, s.currency, s.payment_count,
+  s.confirmed_fraud_count, s.no_fraud_count, s.fraud_rate,
+  s.total_amount, s.average_amount
+)",2026-11-04T23:33:30.293+05:30,SUCCEEDED,1.622 sec,48.36 KB,Athena engine version 3,
+1cbdf205-0b48-4be5-8d61-665b079e04a6,"CREATE TABLE sentinelpay.fraud_daily_metrics_gold ( event_date date, dataset_split string, currency string, payment_count bigint, confirmed_fraud_count bigint, no_fraud_count bigint, fraud_rate double, total_amount double, average_amount double
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/gold/fraud_daily_metrics/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T23:32:53.537+05:30,SUCCEEDED,380 ms,0 MB,Athena engine version 3,
+5534cc18-65c6-4b48-ac52-aaca496ebc10,"SELECT batch_id,
+       min(event_time) AS first_event,
+       max(event_time) AS last_event,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'bronze-10k-seed7-20261104',
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY batch_id
+ORDER BY first_event",2026-11-04T23:31:09.224+05:30,SUCCEEDED,1.027 sec,1.02 MB,Athena engine version 3,
+ce91c200-8c09-4247-bebb-227b2027169d,"SELECT dataset_split,
+       count(*) AS rows,
+       count(DISTINCT payment_id) AS unique_payments,
+       sum(label_fraud) AS confirmed_fraud
+FROM sentinelpay.training_examples_gold
+GROUP BY dataset_split
+ORDER BY dataset_split",2026-11-04T23:28:10.878+05:30,SUCCEEDED,656 ms,37.43 KB,Athena engine version 3,
+6612f630-28fd-4b45-9359-23fbe82af194,"UPDATE sentinelpay.training_examples_gold
+SET dataset_split = CASE
+  WHEN event_date < DATE '2026-06-01' THEN 'TRAIN'
+  WHEN event_date < DATE '2026-09-01' THEN 'VALIDATION'
+  ELSE 'TEST'
+END
+WHERE dataset_split IS NULL",2026-11-04T23:28:01.379+05:30,SUCCEEDED,1.69 sec,459.08 KB,Athena engine version 3,
+381d869b-8941-425b-a120-87fd6be4628e,"ALTER TABLE sentinelpay.training_examples_gold
+ADD COLUMNS (dataset_split string)",2026-11-04T23:27:47.454+05:30,SUCCEEDED,332 ms,0 MB,Athena engine version 3,
+db430afc-345b-4c1a-96a7-b153d5133c9b,"SELECT count(*) AS rows,
+       count(DISTINCT payment_id) AS unique_payments,
+       sum(label_fraud) AS confirmed_fraud,
+       min(event_date) AS first_event_date,
+       max(event_date) AS last_event_date
+FROM sentinelpay.training_examples_gold",2026-11-04T23:26:51.981+05:30,SUCCEEDED,870 ms,37.44 KB,Athena engine version 3,
+ba4270fb-e8be-42aa-877f-de07f5c49926,"MERGE INTO sentinelpay.training_examples_gold AS t
+USING (
+  SELECT
+    data_classification,
+    'v1' AS dataset_version,
+    payment_id,
+    event_id,
+    CAST(substr(event_time, 1, 10) AS date) AS event_date,
+    event_time,
+    received_at,
+    amount,
+    currency,
+    channel,
+    country_code,
+    device_first_seen_days,
+    transaction_count AS transaction_count_1h,
+    amount_sum AS amount_sum_1h,
+    distinct_merchant_count AS distinct_merchant_count_1h,
+    new_device_count AS new_device_count_1h,
+    feature_computed_at,
+    label,
+    CASE WHEN label = 'CONFIRMED_FRAUD' THEN 1 ELSE 0 END AS label_fraud,
+    label_observed_at,
+    date_diff(
+      'day',
+      from_iso8601_timestamp(event_time),
+      from_iso8601_timestamp(label_observed_at)
+    ) AS label_delay_days,
+    label_source
+  FROM (
+    SELECT
+      p.data_classification,
+      p.payment_id,
+      p.event_id,
+      p.event_time,
+      p.received_at,
+      p.amount,
+      p.currency,
+      p.channel,
+      p.country_code,
+      p.device_first_seen_days,
+      f.transaction_count,
+      f.amount_sum,
+      f.distinct_merchant_count,
+      f.new_device_count,
+      f.computed_at AS feature_computed_at,
+      o.outcome AS label,
+      o.label_observed_at,
+      o.outcome_source AS label_source,
+      row_number() OVER (
+        PARTITION BY p.payment_id
+        ORDER BY
+          from_iso8601_timestamp(f.window_end) DESC,
+          from_iso8601_timestamp(f.computed_at) DESC,
+          f.feature_event_id DESC
+      ) AS rn
+    FROM sentinelpay.payments_iceberg p
+    JOIN sentinelpay.chargeback_outcomes_iceberg o
+      ON o.payment_id = p.payment_id
+     AND o.outcome_source = 'SYNTHETIC_LABEL_GENERATOR'
+     AND from_iso8601_timestamp(o.label_observed_at) >=
+         date_add('day', 30, from_iso8601_timestamp(p.event_time))
+    JOIN sentinelpay.fraud_decisions_iceberg d
+      ON d.event_id = p.event_id
+    JOIN sentinelpay.feature_updates_iceberg f
+      ON f.entity_type = 'ACCOUNT'
+     AND f.entity_token = p.account_token
+     AND f.currency = p.currency
+     AND from_iso8601_timestamp(f.window_end) <= from_iso8601_timestamp(p.event_time)
+     AND from_iso8601_timestamp(f.computed_at) <= from_iso8601_timestamp(d.decision_time)
+  )
+  WHERE rn = 1
+) AS s
+ON t.payment_id = s.payment_id
+WHEN MATCHED THEN UPDATE SET
+  data_classification = s.data_classification,
+  dataset_version = s.dataset_version,
+  event_id = s.event_id,
+  event_date = s.event_date,
+  event_time = s.event_time,
+  received_at = s.received_at,
+  amount = s.amount,
+  currency = s.currency,
+  channel = s.channel,
+  country_code = s.country_code,
+  device_first_seen_days = s.device_first_seen_days,
+  transaction_count_1h = s.transaction_count_1h,
+  amount_sum_1h = s.amount_sum_1h,
+  distinct_merchant_count_1h = s.distinct_merchant_count_1h,
+  new_device_count_1h = s.new_device_count_1h,
+  feature_computed_at = s.feature_computed_at,
+  label = s.label,
+  label_fraud = s.label_fraud,
+  label_observed_at = s.label_observed_at,
+  label_delay_days = s.label_delay_days,
+  label_source = s.label_source
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, dataset_version, payment_id, event_id, event_date,
+  event_time, received_at, amount, currency, channel, country_code,
+  device_first_seen_days, transaction_count_1h, amount_sum_1h,
+  distinct_merchant_count_1h, new_device_count_1h, feature_computed_at,
+  label, label_fraud, label_observed_at, label_delay_days, label_source
+) VALUES (
+  s.data_classification, s.dataset_version, s.payment_id, s.event_id, s.event_date,
+  s.event_time, s.received_at, s.amount, s.currency, s.channel, s.country_code,
+  s.device_first_seen_days, s.transaction_count_1h, s.amount_sum_1h,
+  s.distinct_merchant_count_1h, s.new_device_count_1h, s.feature_computed_at,
+  s.label, s.label_fraud, s.label_observed_at, s.label_delay_days, s.label_source
+)",2026-11-04T23:26:39.062+05:30,SUCCEEDED,3.681 sec,1010.19 KB,Athena engine version 3,
+a2456cae-115c-4d3b-91e0-80a6b263a19f,"SELECT
+  count(DISTINCT p.payment_id) AS payments_with_mature_labels,
+  count(DISTINCT CASE
+    WHEN f.feature_event_id IS NOT NULL THEN p.payment_id
+  END) AS payments_with_point_in_time_features
+FROM sentinelpay.payments_iceberg p
+JOIN sentinelpay.chargeback_outcomes_iceberg o
+  ON o.payment_id = p.payment_id
+ AND from_iso8601_timestamp(o.label_observed_at) >=
+     date_add('day', 30, from_iso8601_timestamp(p.event_time))
+JOIN sentinelpay.fraud_decisions_iceberg d
+  ON d.event_id = p.event_id
+LEFT JOIN sentinelpay.feature_updates_iceberg f
+  ON f.entity_type = 'ACCOUNT'
+ AND f.entity_token = p.account_token
+ AND f.currency = p.currency
+ AND from_iso8601_timestamp(f.window_end) <= from_iso8601_timestamp(p.event_time)
+ AND from_iso8601_timestamp(f.computed_at) <= from_iso8601_timestamp(d.decision_time)",2026-11-04T23:25:43.176+05:30,SUCCEEDED,2.126 sec,842.74 KB,Athena engine version 3,
+1fbad570-9dfd-4e08-a7e7-a553bd38ab84,"MERGE INTO sentinelpay.feature_updates_iceberg AS t
+USING (
+  SELECT
+    feature_event_id,
+    concat('atok_', batch_id, '_', substr(entity_token, 6)) AS entity_token
+  FROM sentinelpay.feature_updates_bronze
+  WHERE ingest_date = '2026-11-04'
+    AND batch_id IN (
+      'validation-1500-seed17-20260601',
+      'test-1500-seed29-20260901'
+    )
+    AND entity_type = 'ACCOUNT'
+) AS s
+ON t.feature_event_id = s.feature_event_id
+WHEN MATCHED THEN UPDATE SET entity_token = s.entity_token",2026-11-04T23:25:16.274+05:30,SUCCEEDED,1.624 sec,373.61 KB,Athena engine version 3,
+c4bae304-619e-4444-a5bc-1b7f22cb182b,"SELECT count(*) AS decisions,
+       count(DISTINCT payment_id) AS unique_payment_ids
+FROM sentinelpay.fraud_decisions_iceberg",2026-11-04T23:24:52.156+05:30,SUCCEEDED,626 ms,40.62 KB,Athena engine version 3,
+457b09e9-000f-4f7d-9550-201d706af7b2,"MERGE INTO sentinelpay.fraud_decisions_iceberg AS t
+USING (
+  SELECT
+    decision_id,
+    concat('pay_', batch_id, '_', substr(payment_id, 5)) AS payment_id
+  FROM sentinelpay.fraud_decisions_bronze
+  WHERE ingest_date = '2026-11-04'
+    AND batch_id IN (
+      'validation-1500-seed17-20260601',
+      'test-1500-seed29-20260901'
+    )
+) AS s
+ON t.decision_id = s.decision_id
+WHEN MATCHED THEN UPDATE SET payment_id = s.payment_id",2026-11-04T23:24:40.344+05:30,SUCCEEDED,1.493 sec,689.57 KB,Athena engine version 3,
+e011d8f2-a8cf-44ce-b483-fc0fa310e6e7,"SELECT count(*) AS outcomes,
+       count(DISTINCT payment_id) AS unique_payment_ids
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T23:24:19.344+05:30,SUCCEEDED,735 ms,42.93 KB,Athena engine version 3,
+4422f8a8-85e6-4c48-8dfa-e6d14727cecb,"MERGE INTO sentinelpay.chargeback_outcomes_iceberg AS t
+USING (
+  SELECT
+    outcome_event_id,
+    concat('pay_', batch_id, '_', substr(payment_id, 5)) AS payment_id
+  FROM sentinelpay.chargeback_outcomes_bronze
+  WHERE ingest_date = '2026-11-04'
+    AND batch_id IN (
+      'validation-1500-seed17-20260601',
+      'test-1500-seed29-20260901'
+    )
+) AS s
+ON t.outcome_event_id = s.outcome_event_id
+WHEN MATCHED THEN UPDATE SET payment_id = s.payment_id",2026-11-04T23:24:07.679+05:30,SUCCEEDED,1.718 sec,612.80 KB,Athena engine version 3,
+e6a9cb5f-48a8-4dad-99b2-c41a148bf473,"SELECT count(*) AS duplicate_payment_ids
+FROM (
+  SELECT payment_id
+  FROM sentinelpay.payments_iceberg
+  GROUP BY payment_id
+  HAVING count(*) > 1
+)",2026-11-04T23:23:32.720+05:30,SUCCEEDED,690 ms,43.35 KB,Athena engine version 3,
+7890555e-2dfe-422e-aebf-78107b405bc4,"UPDATE sentinelpay.payments_iceberg
+SET payment_id = concat('pay_smoke_', substr(payment_id, 5)),
+    idempotency_key = concat('idem_smoke_', substr(idempotency_key, 6)),
+    payment_token = concat('ptok_smoke_', substr(payment_token, 6)),
+    account_token = concat('atok_smoke_', substr(account_token, 6)),
+    merchant_id = concat('mer_smoke_', substr(merchant_id, 5)),
+    device_token = concat('dtok_smoke_', substr(device_token, 6))
+WHERE event_time LIKE '2026-11-01%'
+  AND payment_id LIKE 'pay_000000%'",2026-11-04T23:23:16.657+05:30,SUCCEEDED,1.428 sec,2.95 KB,Athena engine version 3,
+4736f4ad-5281-4d98-898e-e02232088f3e,"SELECT count(*) AS duplicate_payment_ids
+FROM (
+  SELECT payment_id
+  FROM sentinelpay.payments_iceberg
+  GROUP BY payment_id
+  HAVING count(*) > 1
+)",2026-11-04T23:22:29.398+05:30,SUCCEEDED,628 ms,43.29 KB,Athena engine version 3,
+b5971097-d601-47a5-96d8-fa468f417e7e,"UPDATE sentinelpay.payments_iceberg
+SET payment_id = concat('pay_smoke_', substr(payment_id, 5)),
+    idempotency_key = concat('idem_smoke_', substr(idempotency_key, 6)),
+    payment_token = concat('ptok_smoke_', substr(payment_token, 6)),
+    account_token = concat('atok_smoke_', substr(account_token, 6)),
+    merchant_id = concat('mer_smoke_', substr(merchant_id, 5)),
+    device_token = concat('dtok_smoke_', substr(device_token, 6))
+WHERE event_time LIKE '2026-11-01T16:%'
+  AND payment_id LIKE 'pay_000000%'",2026-11-04T23:22:20.773+05:30,SUCCEEDED,1.378 sec,2.68 KB,Athena engine version 3,
+53609a88-15e1-4841-be08-3e95d7c0173b,"SELECT payment_id,
+       count(*) AS rows,
+       count(DISTINCT event_id) AS distinct_events,
+       min(event_time) AS earliest_event,
+       max(event_time) AS latest_event
+FROM sentinelpay.payments_iceberg
+GROUP BY payment_id
+HAVING count(DISTINCT event_id) > 1
+ORDER BY payment_id
+LIMIT 30",2026-11-04T23:20:53.985+05:30,SUCCEEDED,781 ms,270.02 KB,Athena engine version 3,
+8aa1ac97-b068-43be-8a73-3b21e9570614,"SELECT count(*) AS rows,
+       count(DISTINCT payment_id) AS unique_payment_ids
+FROM sentinelpay.payments_iceberg",2026-11-04T23:19:56.956+05:30,SUCCEEDED,581 ms,43.17 KB,Athena engine version 3,
+6f6373f7-3bff-4bea-81d1-02d381aa1549,"MERGE INTO sentinelpay.payments_iceberg AS t
+USING (
+  SELECT
+    event_id,
+    concat('pay_', batch_id, '_', substr(payment_id, 5)) AS payment_id,
+    concat('idem_', batch_id, '_', substr(idempotency_key, 6)) AS idempotency_key,
+    concat('ptok_', batch_id, '_', substr(payment_token, 6)) AS payment_token,
+    concat('atok_', batch_id, '_', substr(account_token, 6)) AS account_token,
+    concat('mer_', batch_id, '_', substr(merchant_id, 5)) AS merchant_id,
+    concat('dtok_', batch_id, '_', substr(device_token, 6)) AS device_token
+  FROM (
+    SELECT
+      event_id, batch_id, payment_id, idempotency_key, payment_token,
+      account_token, merchant_id, device_token,
+      row_number() OVER (
+        PARTITION BY event_id
+        ORDER BY received_at, payment_id
+      ) AS rn
+    FROM sentinelpay.payments_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.event_id = s.event_id
+WHEN MATCHED THEN UPDATE SET
+  payment_id = s.payment_id,
+  idempotency_key = s.idempotency_key,
+  payment_token = s.payment_token,
+  account_token = s.account_token,
+  merchant_id = s.merchant_id,
+  device_token = s.device_token",2026-11-04T23:19:48.782+05:30,SUCCEEDED,2.041 sec,783.43 KB,Athena engine version 3,
+06026b8c-06f4-4cd4-94a2-c07237a815dd,"SELECT payment_id,
+       count(DISTINCT batch_id) AS batch_count
+FROM sentinelpay.payments_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'bronze-10k-seed7-20261104',
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY payment_id
+HAVING count(DISTINCT batch_id) > 1
+ORDER BY batch_count DESC, payment_id
+LIMIT 20",2026-11-04T23:18:18.264+05:30,SUCCEEDED,784 ms,1.02 MB,Athena engine version 3,
+c73356f5-76b2-4449-b85f-1b4f8dfc6ff0,"SELECT count(*) AS rows,
+       count(DISTINCT outcome_event_id) AS unique_outcomes,
+       count(DISTINCT payment_id) AS payments_with_outcomes
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T23:16:13.493+05:30,SUCCEEDED,554 ms,166.03 KB,Athena engine version 3,
+e86665dc-1133-4e87-ba19-450ec5ae46c6,"MERGE INTO sentinelpay.chargeback_outcomes_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, outcome_event_id, payment_id,
+    outcome, outcome_source, payment_event_time, label_observed_at,
+    source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, outcome_event_id, payment_id,
+      outcome, outcome_source, payment_event_time, label_observed_at,
+      source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY outcome_event_id
+        ORDER BY label_observed_at, payment_id
+      ) AS rn
+    FROM sentinelpay.chargeback_outcomes_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.outcome_event_id = s.outcome_event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, outcome_event_id, payment_id,
+  outcome, outcome_source, payment_event_time, label_observed_at,
+  source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.outcome_event_id, s.payment_id,
+  s.outcome, s.outcome_source, s.payment_event_time, s.label_observed_at,
+  s.source_region, s.trace_id
+)",2026-11-04T23:16:03.719+05:30,SUCCEEDED,828 ms,267.35 KB,Athena engine version 3,
+e5817901-664c-472b-ba77-1fdf8850f24c,"SELECT count(*) AS rows,
+       count(DISTINCT outcome_event_id) AS unique_outcomes,
+       count(DISTINCT payment_id) AS payments_with_outcomes
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T23:15:57.037+05:30,SUCCEEDED,616 ms,166.03 KB,Athena engine version 3,
+328d39e5-a34b-4e1c-9b53-7f80ae6a9866,"SELECT count(*) AS rows,
+       count(DISTINCT outcome_event_id) AS unique_outcomes,
+       count(DISTINCT payment_id) AS payments_with_outcomes
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T23:15:22.026+05:30,SUCCEEDED,622 ms,166.03 KB,Athena engine version 3,
+98bdd948-5360-4af3-a2f9-60de7e116b41,"MERGE INTO sentinelpay.chargeback_outcomes_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, outcome_event_id, payment_id,
+    outcome, outcome_source, payment_event_time, label_observed_at,
+    source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, outcome_event_id, payment_id,
+      outcome, outcome_source, payment_event_time, label_observed_at,
+      source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY outcome_event_id
+        ORDER BY label_observed_at, payment_id
+      ) AS rn
+    FROM sentinelpay.chargeback_outcomes_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.outcome_event_id = s.outcome_event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, outcome_event_id, payment_id,
+  outcome, outcome_source, payment_event_time, label_observed_at,
+  source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.outcome_event_id, s.payment_id,
+  s.outcome, s.outcome_source, s.payment_event_time, s.label_observed_at,
+  s.source_region, s.trace_id
+)",2026-11-04T23:15:13.321+05:30,SUCCEEDED,3.448 sec,239.45 KB,Athena engine version 3,
+f81f211e-d413-4e95-aa28-f9a2e9d3b29d,"SELECT count(*) AS rows,
+       count(DISTINCT decision_id) AS unique_decisions
+FROM sentinelpay.fraud_decisions_iceberg",2026-11-04T23:14:49.450+05:30,SUCCEEDED,1.357 sec,132.18 KB,Athena engine version 3,
+62535aae-6331-4293-a02c-6a0e16734ae8,"MERGE INTO sentinelpay.fraud_decisions_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, decision_id, event_id, payment_id,
+    decision, risk_score, reason_codes, model_id, model_version,
+    policy_version, feature_age_ms, fallback_used, decision_time,
+    source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, decision_id, event_id, payment_id,
+      decision, risk_score, reason_codes, model_id, model_version,
+      policy_version, feature_age_ms, fallback_used, decision_time,
+      source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY decision_id
+        ORDER BY decision_time, model_version
+      ) AS rn
+    FROM sentinelpay.fraud_decisions_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.decision_id = s.decision_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, decision_id, event_id, payment_id,
+  decision, risk_score, reason_codes, model_id, model_version,
+  policy_version, feature_age_ms, fallback_used, decision_time,
+  source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.decision_id, s.event_id, s.payment_id,
+  s.decision, s.risk_score, s.reason_codes, s.model_id, s.model_version,
+  s.policy_version, s.feature_age_ms, s.fallback_used, s.decision_time,
+  s.source_region, s.trace_id
+)",2026-11-04T23:14:41.170+05:30,SUCCEEDED,1.6 sec,236.02 KB,Athena engine version 3,
+409c214f-ac81-46d4-a29b-ac46a4dd7fee,"SELECT count(*) AS rows,
+       count(DISTINCT feature_event_id) AS unique_events
+FROM sentinelpay.feature_updates_iceberg",2026-11-04T23:14:12.916+05:30,SUCCEEDED,570 ms,132.42 KB,Athena engine version 3,
+eb55199d-4458-49d5-b6dc-13bff1365f50,"MERGE INTO sentinelpay.feature_updates_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, feature_event_id, entity_type,
+    entity_token, feature_version, window_start, window_end,
+    window_seconds, transaction_count, amount_sum, currency,
+    distinct_merchant_count, new_device_count, computed_at, source_region
+  FROM (
+    SELECT
+      data_classification, schema_version, feature_event_id, entity_type,
+      entity_token, feature_version, window_start, window_end,
+      window_seconds, transaction_count, amount_sum, currency,
+      distinct_merchant_count, new_device_count, computed_at, source_region,
+      row_number() OVER (
+        PARTITION BY feature_event_id
+        ORDER BY computed_at, feature_version
+      ) AS rn
+    FROM sentinelpay.feature_updates_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.feature_event_id = s.feature_event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, feature_event_id, entity_type,
+  entity_token, feature_version, window_start, window_end,
+  window_seconds, transaction_count, amount_sum, currency,
+  distinct_merchant_count, new_device_count, computed_at, source_region
+) VALUES (
+  s.data_classification, s.schema_version, s.feature_event_id, s.entity_type,
+  s.entity_token, s.feature_version, s.window_start, s.window_end,
+  s.window_seconds, s.transaction_count, s.amount_sum, s.currency,
+  s.distinct_merchant_count, s.new_device_count, s.computed_at, s.source_region
+)",2026-11-04T23:13:51.616+05:30,SUCCEEDED,1.856 sec,187.26 KB,Athena engine version 3,
+fe12ac18-de03-4617-a148-b3cc63ac0c85,"SELECT count(*) AS rows,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_iceberg",2026-11-04T23:12:56.814+05:30,SUCCEEDED,754 ms,132.39 KB,Athena engine version 3,
+a20a16f7-bd40-4ffc-a80f-e0337b4e7cd7,"MERGE INTO sentinelpay.payments_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, event_id, payment_id,
+    idempotency_key, event_time, received_at, payment_token,
+    account_token, merchant_id, device_token, amount, currency,
+    channel, country_code, device_first_seen_days, source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, event_id, payment_id,
+      idempotency_key, event_time, received_at, payment_token,
+      account_token, merchant_id, device_token, amount, currency,
+      channel, country_code, device_first_seen_days, source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY event_id
+        ORDER BY received_at, payment_id
+      ) AS rn
+    FROM sentinelpay.payments_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id IN (
+        'validation-1500-seed17-20260601',
+        'test-1500-seed29-20260901'
+      )
+  )
+  WHERE rn = 1
+) AS s
+ON t.event_id = s.event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, event_id, payment_id,
+  idempotency_key, event_time, received_at, payment_token,
+  account_token, merchant_id, device_token, amount, currency,
+  channel, country_code, device_first_seen_days, source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.event_id, s.payment_id,
+  s.idempotency_key, s.event_time, s.received_at, s.payment_token,
+  s.account_token, s.merchant_id, s.device_token, s.amount, s.currency,
+  s.channel, s.country_code, s.device_first_seen_days, s.source_region, s.trace_id
+)",2026-11-04T23:12:47.638+05:30,SUCCEEDED,1.664 sec,341.51 KB,Athena engine version 3,
+07408ff0-7ed1-4e4e-9159-f38e38f4f6d0,"SELECT 'payments' AS event_type, batch_id,
+       count(*) AS records, count(DISTINCT event_id) AS unique_ids
+FROM sentinelpay.payments_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY batch_id
+
+UNION ALL
+
+SELECT 'feature_updates', batch_id,
+       count(*), count(DISTINCT feature_event_id)
+FROM sentinelpay.feature_updates_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY batch_id
+
+UNION ALL
+
+SELECT 'fraud_decisions', batch_id,
+       count(*), count(DISTINCT decision_id)
+FROM sentinelpay.fraud_decisions_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY batch_id
+
+UNION ALL
+
+SELECT 'chargeback_outcomes', batch_id,
+       count(*), count(DISTINCT outcome_event_id)
+FROM sentinelpay.chargeback_outcomes_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id IN (
+    'validation-1500-seed17-20260601',
+    'test-1500-seed29-20260901'
+  )
+GROUP BY batch_id",2026-11-04T23:12:07.681+05:30,SUCCEEDED,838 ms,586.58 KB,Athena engine version 3,
+be7e8bb7-9b7f-494b-acb0-8816c3e47ade,MSCK REPAIR TABLE sentinelpay.chargeback_outcomes_bronze,2026-11-04T23:11:58.290+05:30,SUCCEEDED,3.017 sec,0 MB,Athena engine version 3,
+c2cd71b9-6dbe-42cb-9e5b-ca9015015afc,MSCK REPAIR TABLE sentinelpay.fraud_decisions_bronze,2026-11-04T23:11:54.597+05:30,SUCCEEDED,2.855 sec,0 MB,Athena engine version 3,
+70d0cd6c-d100-4930-bc9a-a21eee864fc5,MSCK REPAIR TABLE sentinelpay.feature_updates_bronze,2026-11-04T23:11:52.163+05:30,SUCCEEDED,1.277 sec,0 MB,Athena engine version 3,
+14396187-343c-4b14-ba26-2704eccc3cca,MSCK REPAIR TABLE sentinelpay.payments_bronze,2026-11-04T23:11:31.950+05:30,SUCCEEDED,2.935 sec,0 MB,Athena engine version 3,
+a4cb65f2-b6e7-49ba-93f7-e42e2bb96ec9,"SELECT min(event_date) AS first_event_date,
+       max(event_date) AS last_event_date,
+       count(DISTINCT event_date) AS event_days,
+       count(*) AS training_rows
+FROM sentinelpay.training_examples_gold",2026-11-04T23:04:41.185+05:30,SUCCEEDED,537 ms,0.15 KB,Athena engine version 3,
+859fbfe4-ebb5-4f6c-af12-1e575dc9829d,"SELECT count(*) AS rows,
+       count(DISTINCT payment_id) AS unique_payments,
+       sum(label_fraud) AS confirmed_fraud
+FROM sentinelpay.training_examples_gold",2026-11-04T23:03:17.131+05:30,SUCCEEDED,1.129 sec,26.79 KB,Athena engine version 3,
+0a1ac588-db45-41c1-92f5-8d9498524ae9,"MERGE INTO sentinelpay.training_examples_gold AS t
+USING (
+  SELECT
+    data_classification,
+    'v1' AS dataset_version,
+    payment_id,
+    event_id,
+    CAST(substr(event_time, 1, 10) AS date) AS event_date,
+    event_time,
+    received_at,
+    amount,
+    currency,
+    channel,
+    country_code,
+    device_first_seen_days,
+    transaction_count AS transaction_count_1h,
+    amount_sum AS amount_sum_1h,
+    distinct_merchant_count AS distinct_merchant_count_1h,
+    new_device_count AS new_device_count_1h,
+    feature_computed_at,
+    label,
+    CASE WHEN label = 'CONFIRMED_FRAUD' THEN 1 ELSE 0 END AS label_fraud,
+    label_observed_at,
+    date_diff(
+      'day',
+      from_iso8601_timestamp(event_time),
+      from_iso8601_timestamp(label_observed_at)
+    ) AS label_delay_days,
+    label_source
+  FROM (
+    SELECT
+      p.data_classification,
+      p.payment_id,
+      p.event_id,
+      p.event_time,
+      p.received_at,
+      p.amount,
+      p.currency,
+      p.channel,
+      p.country_code,
+      p.device_first_seen_days,
+      f.transaction_count,
+      f.amount_sum,
+      f.distinct_merchant_count,
+      f.new_device_count,
+      f.computed_at AS feature_computed_at,
+      o.outcome AS label,
+      o.label_observed_at,
+      o.outcome_source AS label_source,
+      row_number() OVER (
+        PARTITION BY p.payment_id
+        ORDER BY
+          from_iso8601_timestamp(f.window_end) DESC,
+          from_iso8601_timestamp(f.computed_at) DESC,
+          f.feature_event_id DESC
+      ) AS rn
+    FROM sentinelpay.payments_iceberg p
+    JOIN sentinelpay.chargeback_outcomes_iceberg o
+      ON o.payment_id = p.payment_id
+     AND o.outcome_source = 'SYNTHETIC_LABEL_GENERATOR'
+     AND from_iso8601_timestamp(o.label_observed_at) >=
+         date_add('day', 30, from_iso8601_timestamp(p.event_time))
+    JOIN sentinelpay.fraud_decisions_iceberg d
+      ON d.event_id = p.event_id
+    JOIN sentinelpay.feature_updates_iceberg f
+      ON f.entity_type = 'ACCOUNT'
+     AND f.entity_token = p.account_token
+     AND f.currency = p.currency
+     AND from_iso8601_timestamp(f.window_end) <= from_iso8601_timestamp(p.event_time)
+     AND from_iso8601_timestamp(f.computed_at) <= from_iso8601_timestamp(d.decision_time)
+  )
+  WHERE rn = 1
+) AS s
+ON t.payment_id = s.payment_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, dataset_version, payment_id, event_id, event_date,
+  event_time, received_at, amount, currency, channel, country_code,
+  device_first_seen_days, transaction_count_1h, amount_sum_1h,
+  distinct_merchant_count_1h, new_device_count_1h, feature_computed_at,
+  label, label_fraud, label_observed_at, label_delay_days, label_source
+) VALUES (
+  s.data_classification, s.dataset_version, s.payment_id, s.event_id, s.event_date,
+  s.event_time, s.received_at, s.amount, s.currency, s.channel, s.country_code,
+  s.device_first_seen_days, s.transaction_count_1h, s.amount_sum_1h,
+  s.distinct_merchant_count_1h, s.new_device_count_1h, s.feature_computed_at,
+  s.label, s.label_fraud, s.label_observed_at, s.label_delay_days, s.label_source
+)",2026-11-04T23:03:01.987+05:30,SUCCEEDED,2.723 sec,729.75 KB,Athena engine version 3,
+62a2a20b-4c1b-440d-ace5-4eb2a065cf20,"CREATE TABLE sentinelpay.training_examples_gold ( data_classification string, dataset_version string, payment_id string, event_id string, event_date date, event_time string, received_at string, amount double, currency string, channel string, country_code string, device_first_seen_days int, transaction_count_1h int, amount_sum_1h double, distinct_merchant_count_1h int, new_device_count_1h int, feature_computed_at string, label string, label_fraud int, label_observed_at string, label_delay_days bigint, label_source string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/gold/training_examples/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T23:02:37.638+05:30,SUCCEEDED,316 ms,0 MB,Athena engine version 3,
+b6456f8a-bcd5-44dc-aae0-521552ac46a7,"SELECT
+  count(DISTINCT p.payment_id) AS payments_with_mature_labels,
+  count(DISTINCT CASE
+    WHEN f.feature_event_id IS NOT NULL THEN p.payment_id
+  END) AS payments_with_point_in_time_features
+FROM sentinelpay.payments_iceberg p
+JOIN sentinelpay.chargeback_outcomes_iceberg o
+  ON o.payment_id = p.payment_id
+ AND from_iso8601_timestamp(o.label_observed_at) >=
+     date_add('day', 30, from_iso8601_timestamp(p.event_time))
+JOIN sentinelpay.fraud_decisions_iceberg d
+  ON d.event_id = p.event_id
+LEFT JOIN sentinelpay.feature_updates_iceberg f
+  ON f.entity_type = 'ACCOUNT'
+ AND f.entity_token = p.account_token
+ AND f.currency = p.currency
+ AND from_iso8601_timestamp(f.window_end) <= from_iso8601_timestamp(p.event_time)
+ AND from_iso8601_timestamp(f.computed_at) <= from_iso8601_timestamp(d.decision_time)",2026-11-04T23:00:57.894+05:30,SUCCEEDED,1.718 sec,622.63 KB,Athena engine version 3,
+7f31330f-ed88-4621-874f-3a085260ebe1,"SELECT 'payments' AS table_name,
+       count(*) AS rows,
+       count(DISTINCT event_id) AS unique_ids
+FROM sentinelpay.payments_iceberg
+
+UNION ALL
+
+SELECT 'feature_updates',
+       count(*),
+       count(DISTINCT feature_event_id)
+FROM sentinelpay.feature_updates_iceberg
+
+UNION ALL
+
+SELECT 'fraud_decisions',
+       count(*),
+       count(DISTINCT decision_id)
+FROM sentinelpay.fraud_decisions_iceberg
+
+UNION ALL
+
+SELECT 'chargeback_outcomes',
+       count(*),
+       count(DISTINCT outcome_event_id)
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T22:59:30.738+05:30,SUCCEEDED,1.095 sec,417.65 KB,Athena engine version 3,
+98fe3b92-4a96-4928-965b-4961c7b7c6a0,"SELECT count(*) AS rows,
+       count(DISTINCT outcome_event_id) AS unique_outcomes,
+       count(DISTINCT payment_id) AS payments_with_outcomes
+FROM sentinelpay.chargeback_outcomes_iceberg",2026-11-04T22:58:38.391+05:30,SUCCEEDED,555 ms,130.18 KB,Athena engine version 3,
+c7ade55e-0ac1-4979-9909-49e452213fa5,"MERGE INTO sentinelpay.chargeback_outcomes_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, outcome_event_id, payment_id,
+    outcome, outcome_source, payment_event_time, label_observed_at,
+    source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, outcome_event_id, payment_id,
+      outcome, outcome_source, payment_event_time, label_observed_at,
+      source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY outcome_event_id
+        ORDER BY label_observed_at, payment_id
+      ) AS rn
+    FROM sentinelpay.chargeback_outcomes_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id = 'bronze-10k-seed7-20261104'
+  )
+  WHERE rn = 1
+) AS s
+ON t.outcome_event_id = s.outcome_event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, outcome_event_id, payment_id,
+  outcome, outcome_source, payment_event_time, label_observed_at,
+  source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.outcome_event_id, s.payment_id,
+  s.outcome, s.outcome_source, s.payment_event_time, s.label_observed_at,
+  s.source_region, s.trace_id
+)",2026-11-04T22:58:32.932+05:30,SUCCEEDED,1.989 sec,462.02 KB,Athena engine version 3,
+6c09e2f6-f562-4839-bf0b-19536f52063e,"SELECT count(*) AS rows,
+       count(DISTINCT decision_id) AS unique_events
+FROM sentinelpay.fraud_decisions_iceberg",2026-11-04T22:57:59.076+05:30,SUCCEEDED,593 ms,104.28 KB,Athena engine version 3,
+4fd6b71f-70db-4f78-9879-f6d989d68c6a,"MERGE INTO sentinelpay.fraud_decisions_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, decision_id, event_id, payment_id,
+    decision, risk_score, reason_codes, model_id, model_version,
+    policy_version, feature_age_ms, fallback_used, decision_time,
+    source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, decision_id, event_id, payment_id,
+      decision, risk_score, reason_codes, model_id, model_version,
+      policy_version, feature_age_ms, fallback_used, decision_time,
+      source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY decision_id
+        ORDER BY decision_time, model_version
+      ) AS rn
+    FROM sentinelpay.fraud_decisions_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id = 'bronze-10k-seed7-20261104'
+  )
+  WHERE rn = 1
+) AS s
+ON t.decision_id = s.decision_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, decision_id, event_id, payment_id,
+  decision, risk_score, reason_codes, model_id, model_version,
+  policy_version, feature_age_ms, fallback_used, decision_time,
+  source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.decision_id, s.event_id, s.payment_id,
+  s.decision, s.risk_score, s.reason_codes, s.model_id, s.model_version,
+  s.policy_version, s.feature_age_ms, s.fallback_used, s.decision_time,
+  s.source_region, s.trace_id
+)",2026-11-04T22:57:47.160+05:30,SUCCEEDED,1.477 sec,436.14 KB,Athena engine version 3,
+0ed8f27c-1e8a-49d6-8d26-707ee1efc800,"SELECT count(*) AS rows,
+       count(DISTINCT feature_event_id) AS unique_events
+FROM sentinelpay.feature_updates_iceberg",2026-11-04T22:57:20.111+05:30,SUCCEEDED,565 ms,104.51 KB,Athena engine version 3,
+f9a444e8-e487-4a94-a2fd-495f703cda64,"MERGE INTO sentinelpay.feature_updates_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, feature_event_id, entity_type,
+    entity_token, feature_version, window_start, window_end,
+    window_seconds, transaction_count, amount_sum, currency,
+    distinct_merchant_count, new_device_count, computed_at, source_region
+  FROM (
+    SELECT
+      data_classification, schema_version, feature_event_id, entity_type,
+      entity_token, feature_version, window_start, window_end,
+      window_seconds, transaction_count, amount_sum, currency,
+      distinct_merchant_count, new_device_count, computed_at, source_region,
+      row_number() OVER (
+        PARTITION BY feature_event_id
+        ORDER BY computed_at, feature_version
+      ) AS rn
+    FROM sentinelpay.feature_updates_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id = 'bronze-10k-seed7-20261104'
+  )
+  WHERE rn = 1
+) AS s
+ON t.feature_event_id = s.feature_event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, feature_event_id, entity_type,
+  entity_token, feature_version, window_start, window_end,
+  window_seconds, transaction_count, amount_sum, currency,
+  distinct_merchant_count, new_device_count, computed_at, source_region
+) VALUES (
+  s.data_classification, s.schema_version, s.feature_event_id, s.entity_type,
+  s.entity_token, s.feature_version, s.window_start, s.window_end,
+  s.window_seconds, s.transaction_count, s.amount_sum, s.currency,
+  s.distinct_merchant_count, s.new_device_count, s.computed_at, s.source_region
+)",2026-11-04T22:57:13.741+05:30,SUCCEEDED,1.664 sec,271.62 KB,Athena engine version 3,
+3ddff010-8682-4495-8482-3375353f1b02,"SELECT count(*) AS row_count,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_iceberg",2026-11-04T22:56:37.731+05:30,SUCCEEDED,913 ms,104.47 KB,Athena engine version 3,
+654d9c9d-6f7a-4d8f-ad86-e832d8d0c139,"MERGE INTO sentinelpay.payments_iceberg AS t
+USING (
+  SELECT
+    data_classification, schema_version, event_id, payment_id,
+    idempotency_key, event_time, received_at, payment_token,
+    account_token, merchant_id, device_token, amount, currency,
+    channel, country_code, device_first_seen_days, source_region, trace_id
+  FROM (
+    SELECT
+      data_classification, schema_version, event_id, payment_id,
+      idempotency_key, event_time, received_at, payment_token,
+      account_token, merchant_id, device_token, amount, currency,
+      channel, country_code, device_first_seen_days, source_region, trace_id,
+      row_number() OVER (
+        PARTITION BY event_id
+        ORDER BY received_at, payment_id
+      ) AS rn
+    FROM sentinelpay.payments_bronze
+    WHERE ingest_date = '2026-11-04'
+      AND batch_id = 'bronze-10k-seed7-20261104'
+  )
+  WHERE rn = 1
+) AS s
+ON t.event_id = s.event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification, schema_version, event_id, payment_id,
+  idempotency_key, event_time, received_at, payment_token,
+  account_token, merchant_id, device_token, amount, currency,
+  channel, country_code, device_first_seen_days, source_region, trace_id
+) VALUES (
+  s.data_classification, s.schema_version, s.event_id, s.payment_id,
+  s.idempotency_key, s.event_time, s.received_at, s.payment_token,
+  s.account_token, s.merchant_id, s.device_token, s.amount, s.currency,
+  s.channel, s.country_code, s.device_first_seen_days, s.source_region, s.trace_id
+)",2026-11-04T22:56:22.436+05:30,SUCCEEDED,2.58 sec,810.57 KB,Athena engine version 3,
+920ccac6-e19c-4c59-984d-f011703db91b,SHOW TABLES IN sentinelpay,2026-11-04T22:55:16.363+05:30,SUCCEEDED,147 ms,0 MB,Athena engine version 3,
+d8fda468-f0fa-4944-9e5e-628d58b31406,"CREATE TABLE sentinelpay.chargeback_outcomes_iceberg ( data_classification string, schema_version int, outcome_event_id string, payment_id string, outcome string, outcome_source string, payment_event_time string, label_observed_at string, source_region string, trace_id string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/iceberg/chargeback_outcomes/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T22:54:02.349+05:30,SUCCEEDED,289 ms,0 MB,Athena engine version 3,
+0cd15a4e-91b2-4293-bf28-0bc950e830b6,"CREATE TABLE sentinelpay.fraud_decisions_iceberg ( data_classification string, schema_version int, decision_id string, event_id string, payment_id string, decision string, risk_score double, reason_codes array<string>, model_id string, model_version string, policy_version string, feature_age_ms int, fallback_used boolean, decision_time string, source_region string, trace_id string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/iceberg/fraud_decisions/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T22:53:50.272+05:30,SUCCEEDED,288 ms,0 MB,Athena engine version 3,
+54ed4a17-409f-4ad0-94c9-fb21a46a1fd0,"CREATE TABLE sentinelpay.feature_updates_iceberg ( data_classification string, schema_version int, feature_event_id string, entity_type string, entity_token string, feature_version int, window_start string, window_end string, window_seconds int, transaction_count int, amount_sum double, currency string, distinct_merchant_count int, new_device_count int, computed_at string, source_region string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/iceberg/feature_updates/'
+TBLPROPERTIES ('table_type' = 'ICEBERG', 'format' = 'PARQUET')",2026-11-04T22:53:38.013+05:30,SUCCEEDED,247 ms,0 MB,Athena engine version 3,
+badcff5f-9e79-4f36-809c-bd4d3576ded4,"SELECT 'payments' AS event_type,
+       count(*) AS records,
+       count(DISTINCT event_id) AS unique_ids
+FROM sentinelpay.payments_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id = 'bronze-10k-seed7-20261104'
+
+UNION ALL
+
+SELECT 'feature_updates',
+       count(*),
+       count(DISTINCT feature_event_id)
+FROM sentinelpay.feature_updates_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id = 'bronze-10k-seed7-20261104'
+
+UNION ALL
+
+SELECT 'fraud_decisions',
+       count(*),
+       count(DISTINCT decision_id)
+FROM sentinelpay.fraud_decisions_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id = 'bronze-10k-seed7-20261104'
+
+UNION ALL
+
+SELECT 'chargeback_outcomes',
+       count(*),
+       count(DISTINCT outcome_event_id)
+FROM sentinelpay.chargeback_outcomes_bronze
+WHERE ingest_date = '2026-11-04'
+  AND batch_id = 'bronze-10k-seed7-20261104'",2026-11-04T22:52:33.831+05:30,SUCCEEDED,821 ms,1.93 MB,Athena engine version 3,
+a5197dc5-8953-419c-90f8-7940036c5510,MSCK REPAIR TABLE sentinelpay.chargeback_outcomes_bronze,2026-11-04T22:52:01.807+05:30,SUCCEEDED,2.965 sec,0 MB,Athena engine version 3,
+515c380c-ff38-4703-a5ac-0b764e3ff1a3,MSCK REPAIR TABLE sentinelpay.fraud_decisions_bronze,2026-11-04T22:51:55.789+05:30,SUCCEEDED,3.154 sec,0 MB,Athena engine version 3,
+92327de2-6d2e-4e8d-b7e9-e0d48853c728,MSCK REPAIR TABLE sentinelpay.feature_updates_bronze,2026-11-04T22:51:45.235+05:30,SUCCEEDED,1.369 sec,0 MB,Athena engine version 3,
+a1345960-c75b-48c6-bd2c-ba990bb1a6e4,MSCK REPAIR TABLE sentinelpay.payments_bronze,2026-11-04T22:51:30.707+05:30,SUCCEEDED,3.182 sec,0 MB,Athena engine version 3,
+6200f047-5290-4c83-92e6-a17558e41a11,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.chargeback_outcomes_bronze ( data_classification string, schema_version int, outcome_event_id string, payment_id string, outcome string, outcome_source string, payment_event_time string, label_observed_at string, source_region string, trace_id string
+)
+PARTITIONED BY (ingest_date string, batch_id string)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/raw/chargeback_outcomes/'",2026-11-04T22:51:14.219+05:30,SUCCEEDED,271 ms,0 MB,Athena engine version 3,
+4e6592ec-8f50-4d0c-91ab-42268c8cedbc,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.fraud_decisions_bronze ( data_classification string, schema_version int, decision_id string, event_id string, payment_id string, decision string, risk_score double, reason_codes array<string>, model_id string, model_version string, policy_version string, feature_age_ms int, fallback_used boolean, decision_time string, source_region string, trace_id string
+)
+PARTITIONED BY (ingest_date string, batch_id string)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/raw/fraud_decisions/'",2026-11-04T22:51:01.980+05:30,SUCCEEDED,333 ms,0 MB,Athena engine version 3,
+6f35909f-05c4-4190-812c-cb7720073a16,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.feature_updates_bronze ( data_classification string, schema_version int, feature_event_id string, entity_type string, entity_token string, feature_version int, window_start string, window_end string, window_seconds int, transaction_count int, amount_sum double, currency string, distinct_merchant_count int, new_device_count int, computed_at string, source_region string
+)
+PARTITIONED BY (ingest_date string, batch_id string)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/raw/feature_updates/'",2026-11-04T22:50:44.395+05:30,SUCCEEDED,383 ms,0 MB,Athena engine version 3,
+346410eb-7846-44d1-ada2-425fbb00a917,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.payments_bronze ( data_classification string, schema_version int, event_id string, payment_id string, idempotency_key string, event_time string, received_at string, payment_token string, account_token string, merchant_id string, device_token string, amount double, currency string, channel string, country_code string, device_first_seen_days int, source_region string, trace_id string
+)
+PARTITIONED BY (ingest_date string, batch_id string)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/raw/payments/'",2026-11-04T22:50:26.274+05:30,SUCCEEDED,320 ms,0 MB,Athena engine version 3,
+26df085f-79b6-4956-951f-cfb6655e9472,"SELECT count(*) AS row_count,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_iceberg",2026-11-04T22:30:00.667+05:30,SUCCEEDED,2.268 sec,0.28 KB,Athena engine version 3,
+8d8283a7-fdec-4ec0-922e-dcdff5bf27cd,"SELECT count(*) AS row_count,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_iceberg",2026-11-04T22:29:22.393+05:30,SUCCEEDED,548 ms,0.28 KB,Athena engine version 3,
+5fa3e023-26f2-474f-847f-3f080375cf4e,"MERGE INTO sentinelpay.payments_iceberg AS target
+USING (
+  SELECT
+    data_classification,
+    schema_version,
+    event_id,
+    payment_id,
+    idempotency_key,
+    event_time,
+    received_at,
+    payment_token,
+    account_token,
+    merchant_id,
+    device_token,
+    amount,
+    currency,
+    channel,
+    country_code,
+    device_first_seen_days,
+    source_region,
+    trace_id
+  FROM sentinelpay.payments_parquet
+  WHERE run_date = '2026-11-04'
+    AND run_id = '20261104T163402Z'
+) AS source
+ON target.event_id = source.event_id
+WHEN NOT MATCHED THEN INSERT (
+  data_classification,
+  schema_version,
+  event_id,
+  payment_id,
+  idempotency_key,
+  event_time,
+  received_at,
+  payment_token,
+  account_token,
+  merchant_id,
+  device_token,
+  amount,
+  currency,
+  channel,
+  country_code,
+  device_first_seen_days,
+  source_region,
+  trace_id
+) VALUES (
+  source.data_classification,
+  source.schema_version,
+  source.event_id,
+  source.payment_id,
+  source.idempotency_key,
+  source.event_time,
+  source.received_at,
+  source.payment_token,
+  source.account_token,
+  source.merchant_id,
+  source.device_token,
+  source.amount,
+  source.currency,
+  source.channel,
+  source.country_code,
+  source.device_first_seen_days,
+  source.source_region,
+  source.trace_id
+)",2026-11-04T22:29:08.682+05:30,SUCCEEDED,2.122 sec,4.01 KB,Athena engine version 3,
+cad1efe6-50dd-4f07-a6ed-8f988670873e,"CREATE TABLE sentinelpay.payments_iceberg ( data_classification string, schema_version int, event_id string, payment_id string, idempotency_key string, event_time string, received_at string, payment_token string, account_token string, merchant_id string, device_token string, amount double, currency string, channel string, country_code string, device_first_seen_days int, source_region string, trace_id string
+)
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/iceberg/payments/'
+TBLPROPERTIES ( 'table_type' = 'ICEBERG', 'format' = 'PARQUET'
+)",2026-11-04T22:28:22.178+05:30,SUCCEEDED,388 ms,0 MB,Athena engine version 3,
+5cff4b82-52b7-47e0-a40c-8d9819ee352a,"SELECT count(*) AS row_count,
+       count(DISTINCT event_id) AS unique_events
+FROM sentinelpay.payments_parquet
+WHERE run_date = '2026-11-04'
+  AND run_id = '20261104T163402Z'",2026-11-04T22:12:27.305+05:30,SUCCEEDED,690 ms,0.47 KB,Athena engine version 3,
+26a3bac4-061e-43b4-9f5e-ebbfddc3f190,MSCK REPAIR TABLE sentinelpay.payments_parquet,2026-11-04T22:12:09.854+05:30,SUCCEEDED,2.952 sec,0 MB,Athena engine version 3,
+5ece0995-60c9-42b1-8ee1-9375841fa260,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.payments_parquet ( data_classification string, schema_version int, event_id string, payment_id string, idempotency_key string, event_time string, received_at string, payment_token string, account_token string, merchant_id string, device_token string, amount double, currency string, channel string, country_code string, device_first_seen_days int, source_region string, trace_id string
+)
+PARTITIONED BY ( run_date string, run_id string
+)
+STORED AS PARQUET
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/parquet/payments/'",2026-11-04T22:11:48.980+05:30,SUCCEEDED,331 ms,0 MB,Athena engine version 3,
+e2dac772-29a3-45eb-996a-c6b2df51b6ac,CREATE DATABASE IF NOT EXISTS sentinelpay,2026-11-04T22:11:35.725+05:30,SUCCEEDED,191 ms,0 MB,Athena engine version 3,
+603b07a6-af34-4a17-9a0c-b163dfe7cca6,"CREATE EXTERNAL TABLE IF NOT EXISTS sentinelpay.payments_parquet ( data_classification string, schema_version int, event_id string, payment_id string, idempotency_key string, event_time string, received_at string, payment_token string, account_token string, merchant_id string, device_token string, amount double, currency string, channel string, country_code string, device_first_seen_days int, source_region string, trace_id string
+)
+PARTITIONED BY ( run_date string, run_id string
+)
+STORED AS PARQUET
+LOCATION 's3://sentinelpay-raw-dev-908768512617-ap-southeast-2/curated/parquet/payments/'",2026-11-04T22:11:06.955+05:30,FAILED,446 ms,0 MB,Athena engine version 3,
+a847ef8e-ea75-4643-ab06-14b32e11f623,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T23:35:55.438+05:30,SUCCEEDED,1.082 sec,4.57 MB,Athena engine version 3,
+fcaf670f-a188-4f1c-ab2d-2d2c6309ffba,"SELECT * FROM ""clean_reference_data"" LIMIT 10000",2026-10-31T23:32:58.091+05:30,SUCCEEDED,595 ms,24.61 KB,Athena engine version 3,
+c2db5315-3f62-4b09-9514-88ac68ab7bf1,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T23:32:54.140+05:30,SUCCEEDED,979 ms,3.28 MB,Athena engine version 3,
+4d1add75-ea45-4be0-9a2f-35c3e34fc0dc,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T22:52:35.442+05:30,SUCCEEDED,1.058 sec,5.55 MB,Athena engine version 3,
+ffa1a14f-93e9-48bd-a1fd-ee5944b45f0a,"SELECT * FROM ""clean_reference_data"" LIMIT 10000",2026-10-31T22:49:50.197+05:30,SUCCEEDED,493 ms,24.61 KB,Athena engine version 3,
+ec6c9a93-8dbf-4b02-9e72-9e7d912ec7dd,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T22:49:47.644+05:30,SUCCEEDED,835 ms,2.99 MB,Athena engine version 3,
+49070ce6-0a0c-4f4e-90f5-4bfa303cbb83,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T19:16:34.410+05:30,SUCCEEDED,806 ms,4.07 MB,Athena engine version 3,
+f0d7fbdc-2cc3-4809-92aa-6e781614c120,"SELECT * FROM ""clean_reference_data"" LIMIT 10000",2026-10-31T19:13:31.081+05:30,SUCCEEDED,497 ms,24.61 KB,Athena engine version 3,
+3bc230b1-1175-4f82-9e28-774ebaee4bf4,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T19:13:27.340+05:30,SUCCEEDED,1.232 sec,4.46 MB,Athena engine version 3,
+eda16e8e-91fa-4811-86eb-58a8d923495e,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T19:06:03.018+05:30,SUCCEEDED,887 ms,2.54 MB,Athena engine version 3,
+4516611f-095b-49cb-a1ce-e4b5166400cd,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:54:27.148+05:30,SUCCEEDED,730 ms,2.47 MB,Athena engine version 3,
+6d3b2c8a-3a6e-4ea2-aafc-2e599ebeb440,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:19:17.789+05:30,SUCCEEDED,803 ms,4.76 MB,Athena engine version 3,
+b078ac42-a94d-440a-bd5e-b102cbf3708e,"SELECT * FROM ""clean_reference_data"" LIMIT 10000",2026-10-31T18:14:59.340+05:30,SUCCEEDED,530 ms,24.61 KB,Athena engine version 3,
+e54843ec-3a47-4a52-9458-abd0ef1962b1,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:14:56.051+05:30,SUCCEEDED,1.003 sec,3.50 MB,Athena engine version 3,
+2f87fc78-2684-4cfd-bad2-e095be6a5255,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:13:55.948+05:30,SUCCEEDED,1.555 sec,5.47 MB,Athena engine version 3,
+b08a9e2d-c3dc-4c14-8e01-00fdffa4df02,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:13:29.423+05:30,SUCCEEDED,869 ms,3.37 MB,Athena engine version 3,
+13007c52-e0bc-40ad-a29f-b2e43d5635ae,"SELECT * FROM ""clean_statistics"" LIMIT 10000",2026-10-31T18:13:28.056+05:30,FAILED,790 ms,2.70 MB,Athena engine version 3,
+c8bc905f-1194-48ea-a4da-e22d7ec100db,select * from category_analytics,2026-10-31T16:00:58.687+05:30,SUCCEEDED,633 ms,196.25 KB,Athena engine version 3,
+73796f74-f425-4e53-a6f8-1e5f48059515,"DROP VIEW ""test1""",2026-10-31T16:00:39.458+05:30,SUCCEEDED,480 ms,0 MB,Athena engine version 3,
+d5fd6bdb-50cf-44d6-ac8b-6e15359e2552,"CREATE OR REPLACE VIEW ""Test1"" AS 
+select * from channel_analytics",2026-10-31T16:00:00.530+05:30,SUCCEEDED,295 ms,0 MB,Athena engine version 3,
+6553fec9-2dc2-4814-b688-d5837a539512,select * from channel_analytics,2026-10-31T15:59:19.118+05:30,SUCCEEDED,545 ms,159.10 KB,Athena engine version 3,
+59362adc-0b1a-49f8-b884-cc9fa57a867d,select * from trending_analytics,2026-10-31T15:58:36.673+05:30,SUCCEEDED,482 ms,65.90 KB,Athena engine version 3,
+58616a90-8055-4d10-a68c-6cf0dab6a6cf,"SELECT * FROM ""yt_pipeline_silver_dev"".""raw_statistics"" limit 10",2026-10-31T12:13:45.369+05:30,FAILED,162 ms,0 MB,Athena engine version 3,
+fe70605b-4cac-4084-8add-af0292f50fa1,"SELECT * FROM ""yt_pipeline_silver_dev"".""raw_statistics"" limit 10",2026-10-31T12:13:29.852+05:30,FAILED,253 ms,0 MB,Athena engine version 3,
+0ae9844c-7a1e-4bb4-b3a8-e54332c0183f,"SELECT * FROM ""yt_pipeline_silver_dev"".""raw_statistics"" limit 10",2026-10-31T12:13:04.647+05:30,FAILED,208 ms,0 MB,Athena engine version 3,
+fc0d70ab-19ba-4c23-a89f-2db782e8b844,"SELECT * FROM ""yt_pipeline_bronze_dev"".""raw_statistics"" limit 10",2026-10-31T12:12:19.986+05:30,SUCCEEDED,1.407 sec,9.49 MB,Athena engine version 3,
+ccc5eccf-e604-41b6-9eda-39108cd8dacc,"SELECT * FROM ""yt_pipeline_bronze_dev"".""raw_statistics"" limit 10",2026-10-31T12:11:58.826+05:30,SUCCEEDED,2.303 sec,10.30 MB,Athena engine version 3,
+1e766552-3266-4cb9-afdd-1c4ff909c189,"SELECT * FROM ""yt_pipeline_bronze_dev"".""raw_statistics"" limit 10",2026-10-09T01:36:15.239+05:30,SUCCEEDED,1.585 sec,1.55 MB,Athena engine version 3,
