@@ -1,3 +1,20 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 data "aws_caller_identity" "current" {}
 
 locals {
@@ -19,7 +36,6 @@ resource "aws_s3_bucket_public_access_block" "raw" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "raw" {
   bucket = aws_s3_bucket.raw.id
-
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm     = "aws:kms"
@@ -38,7 +54,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "raw" {
     status = "Enabled"
 
     filter {
-      prefix = ""
+      prefix = "raw/"
     }
 
     expiration {
@@ -46,3 +62,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "raw" {
     }
   }
 }
+
+
+
+
+

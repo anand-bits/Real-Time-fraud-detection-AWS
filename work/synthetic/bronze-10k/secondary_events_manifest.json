@@ -1,0 +1,7 @@
+{
+  "data_classification": "SYNTHETIC",
+  "unique_payment_count": 10000,
+  "feature_update_count": 10000,
+  "fraud_decision_count": 10000,
+  "decision_type": "deterministic synthetic rules; not an ML prediction"
+}
