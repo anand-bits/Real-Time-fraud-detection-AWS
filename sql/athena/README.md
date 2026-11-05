@@ -19,3 +19,7 @@ Run the files one at a time in this order in the Athena workgroup and database `
 The SQL here combines the statements visible in Athena history with the project contracts and the resulting schema/counts to provide a complete ordered set. Check the S3 bucket and database names before running it in another account. The `CREATE TABLE IF NOT EXISTS` statements do not replace or alter existing tables; for a rebuild, use a clean database or explicitly migrate the existing tables after checking their catalog definitions.
 
 The export query writes to a new prefix. Change `export_id` for every new export because Athena UNLOAD requires a destination without existing objects. The query keeps `dataset_split` as the final selected column for partitioned output.
+
+## Automated batch processing
+
+The first Glue implementation is in `src/glue/sentinelpay_batch_job.py`, with its job and scoped execution role in `infra/terraform/glue.tf` and `infra/terraform/glue_iam.tf`. It reads the exact raw batch prefixes so it can preserve malformed input for quarantine, then merges validated records into the existing Iceberg tables. The Bronze Athena tables remain available for querying and reconciliation. See [the Glue batch runbook](../../docs/runbooks/glue-batch-etl.md) before deploying or starting the job.

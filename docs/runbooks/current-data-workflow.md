@@ -94,6 +94,8 @@ Select the Athena workgroup and database `sentinelpay`. Run the saved SQL in [`s
 
 These SQL files reproduce the lakehouse steps. Existing tables created earlier with `IF NOT EXISTS` will remain as-is; use a clean database for a full rebuild. Compare `SHOW CREATE TABLE` output against the files before applying changes to existing tables.
 
+For the new Glue-based automated path, see the dedicated [Glue batch ETL runbook](glue-batch-etl.md). It processes raw partitions and merges to the same Silver and Gold tables; Athena SQL remains available for inspection and manual recovery.
+
 ## 6. Export and train the baseline
 
 Use [`sql/athena/08_export_training_examples.sql`](../../sql/athena/08_export_training_examples.sql) with a fresh `export_id` destination. Athena `UNLOAD` needs an empty/nonexistent destination prefix. Download the three `dataset_split=...` folders from that exact export to `work/ml/training-export/` (or pass a different directory to the trainer), then run:

@@ -15,3 +15,15 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "glue_database" {
+  description = "Existing Glue Data Catalog database containing the SentinelPay tables"
+  type        = string
+  default     = "sentinelpay"
+}
+
+variable "glue_job_name" {
+  description = "Name of the single-batch Glue Spark ETL job"
+  type        = string
+  default     = "sentinelpay-batch-etl-dev"
+}
