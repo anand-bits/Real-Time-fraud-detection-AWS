@@ -40,19 +40,20 @@ flowchart LR
   FLINK_A -->|optional regional relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_B
   FLINK_B -->|optional regional relay • origin_region loop guard\nproducer IDs + replay checkpoints| STREAM_A
 
-  subgraph DATA["Data/model platform • same-account baseline; split optional"]
+  subgraph DATA["Data/model platform • deployed training and registration; other services are target/optional"]
     direction TB
     RAW_A --> ICE["Glue Spark + Apache Iceberg\nbronze → silver → gold\nCDC + dedupe + reconciliation"]
     RAW_B --> ICE
-    CAT["Glue Data Catalog + Lake Formation\nrow / column grants"] --- ICE
+    CAT["Glue Data Catalog (active)\nLake Formation row / column grants (future)"] --- ICE
     ICE --> ATH["Athena\nad hoc investigation"]
     ICE --> WH["Redshift Serverless\ncase analytics (optional) "]
-    ICE --> TRAIN["SageMaker Pipelines\ntrain • backtest • bias / drift checks"]
-    TRAIN --> REG["SageMaker Model Registry\napproval + lineage"]
-    REG -->|canary + rollback gates| MODEL_A
-    REG -->|canary + rollback gates| MODEL_B
-    ORCH["Step Functions\nreplay • reconciliation • retraining"] --> ICE
-    ORCH --> TRAIN
+    ICE --> TRAIN["Glue export + training Lambda\nmaturity gates • train / validate / test"]
+    TRAIN --> SREG["SageMaker Pipelines\nregistration workflow only\ncompare held-out TEST ROC-AUC"]
+    SREG --> GATE["Registry gate Lambda\nregister improvements only"]
+    GATE --> REG["SageMaker Model Registry\nversioned packages\nPending manual approval"]
+    REG -.->|future manual deployment after approval| MODEL_A
+    REG -.->|future manual deployment after approval| MODEL_B
+    ORCH["Step Functions orchestration\nfuture / optional"] --> ICE
   end
 
   subgraph PLATFORM["Security, resilience, and operations • portfolio baseline and optional Regions"]
@@ -72,4 +73,4 @@ flowchart LR
   class APIA,APIB,AUTH_A,AUTH_B,STREAM_A,STREAM_B,FLINK_A,FLINK_B primary
   class FEAT_A,FEAT_B,LEDGER_A,LEDGER_B,RAW_A,RAW_B,ICE store
   class DLQ_A,DLQ_B,ALERT_A,ALERT_B,OBS,BUS,ORCH ops
-  class MODEL_A,MODEL_B,TRAIN,REG model
+  class MODEL_A,MODEL_B,TRAIN,SREG,GATE,REG model

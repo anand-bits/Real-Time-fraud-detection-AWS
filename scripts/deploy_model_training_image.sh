@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SENTINELPAY_REGION="${SENTINELPAY_REGION:-ap-southeast-2}"
-SENTINELPAY_MODEL_IMAGE_TAG="${SENTINELPAY_MODEL_IMAGE_TAG:-v3}"
+SENTINELPAY_MODEL_IMAGE_TAG="${SENTINELPAY_MODEL_IMAGE_TAG:-v4}"
+export AWS_SDK_UA_APP_ID=AWSSkill-SageMaker
 SENTINELPAY_REPOSITORY="sentinelpay-model-training-dev"
 SENTINELPAY_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text --region "$SENTINELPAY_REGION")"
 SENTINELPAY_REGISTRY="${SENTINELPAY_ACCOUNT_ID}.dkr.ecr.${SENTINELPAY_REGION}.amazonaws.com"

@@ -6,22 +6,24 @@ SentinelPay scores synthetic, tokenized card-not-present payment requests and ev
 
 ## Architecture
 
-![SentinelPay advanced target architecture](architecture/financial-fraud-architecture.svg)
+![SentinelPay implemented data and model registration workflow](architecture/current-implemented-data-workflow.svg)
 
-- [Editable target architecture](architecture/financial-fraud-architecture.mmd)
-- [Current implemented data workflow](architecture/current-implemented-data-workflow.mmd)
+![SentinelPay broader target architecture](architecture/financial-fraud-architecture.svg)
+
+- [Editable implemented workflow](architecture/current-implemented-data-workflow.mmd)
+- [Editable broader target architecture](architecture/financial-fraud-architecture.mmd)
 - [Step 1 scope diagram](architecture/step-1-business-scope.svg)
 - [Step 1 charter](docs/adr/000-project-charter.md)
 - [Architecture decision records](docs/adr/)
 
-The full diagram shows a production-style target. **Build and deploy a single-Region baseline first.** Region B, cross-Region replication, and the MRSC witness are optional, time-boxed labs. The diagram does not mean these resources are implemented or deployed.
+The first diagram shows the deployed single-Region data and model-registration path. The broader diagram is a production-style target; serving endpoints, Region B, cross-Region replication, Lake Formation row/column grants, and automated deployment remain future or optional work.
 
 ## What the project demonstrates
 
 - **Authorization:** API Gateway/WAF, bounded decision service, local feature lookup, SageMaker inference, rules fallback, idempotent result, and stable event key.
 - **Streaming:** Kinesis Data Streams, Managed Apache Flink event-time windows, late-event handling, quarantine, and controlled replay.
 - **Lakehouse:** S3 and Iceberg bronze/silver/gold tables, Glue transformations/catalog, reconciliation, and Athena investigation. Redshift Serverless is optional.
-- **ML lifecycle:** point-in-time training, leakage checks, temporal evaluation, calibration/fairness/drift review, model registry, canary, and rollback.
+- **ML lifecycle:** Glue exports mature, point-in-time splits; a Lambda trains on TRAIN, chooses the threshold on VALIDATION, and evaluates TEST. SageMaker Pipelines compares TEST ROC-AUC and registers only improvements for owner approval. Temporal backtests, bias/drift review, endpoint deployment, canary, and rollback remain future work.
 - **Operations:** Terraform, least-privilege roles, encryption, observability, CI, runbooks, load tests, and failure exercises.
 
 ## Personal-project deployment strategy
@@ -107,7 +109,7 @@ Implementation folders are placeholders. Never commit credentials, account-speci
 4. Implement the one-Region AWS vertical slice.
 5. Add Flink velocity features, quarantine, and replay.
 6. Build Iceberg/Glue tables and reconciliation.
-7. Add point-in-time ML evaluation and model registry/canary/rollback.
+7. Add temporal backtests, bias/drift checks, and an approved model deployment/rollback path.
 8. Add security controls, CI, dashboards, alerts, and runbooks.
 9. Run bounded load/failure tests and publish results.
 10. Optionally compare multi-Region MREC/MRSC behavior and costs, then tear down the lab.
@@ -116,9 +118,9 @@ Implementation folders are placeholders. Never commit credentials, account-speci
 
 The implemented data engineering slice is documented in [the current data workflow runbook](docs/runbooks/current-data-workflow.md). It covers deterministic synthetic batch generation, landing to S3, Athena Bronze/Silver/Gold processing, reconciliation, streaming smoke checks, training export, and the Logistic Regression baseline. Saved Athena verification queries are in [sql/athena](sql/athena/README.md).
 
-The first automated Glue Spark batch job is documented in [the Glue batch runbook](docs/runbooks/glue-batch-etl.md). It processes one raw batch, quarantines invalid rows, merges Silver and Gold Iceberg tables, exports the split training dataset, and writes reconciliation status. It is a manually started ETL job.
+The automated Glue Spark batch job is documented in [the Glue batch runbook](docs/runbooks/glue-batch-etl.md). A completed S3 batch marker starts the job; it processes one raw batch, quarantines invalid rows, merges Silver and Gold Iceberg tables, exports the split training dataset, and writes reconciliation status. It can also be started manually for recovery.
 
-The Glue success manifest triggers a container-based model-training Lambda. It reads the S3 TRAIN, VALIDATION, and TEST Parquet splits, checks label maturity and minimum sample gates, trains a versioned Logistic Regression artifact, and writes metrics to S3. Model promotion/deployment remains a separate approval step; see [the model-training Lambda runbook](docs/runbooks/model-training-lambda.md).
+The Glue success manifest triggers a container-based model-training Lambda. It reads the S3 TRAIN, VALIDATION, and TEST Parquet splits, checks label maturity and minimum sample gates, trains a versioned Logistic Regression artifact, and writes metrics to S3. That Lambda starts the separate SageMaker registration pipeline; a registry gate compares TEST ROC-AUC and registers a higher-scoring version as `PendingManualApproval`. The current group contains version 1 with TEST ROC-AUC 0.8570. Approval does not deploy an endpoint. See [the model-training and registration runbook](docs/runbooks/model-training-lambda.md).
 
 The cloud deployment is still a learning baseline. The architecture above describes the broader target, while the runbook distinguishes built steps from optional or future components. Running the S3 landing, Terraform, or Kinesis sections makes AWS changes and may incur charges.
 
@@ -139,4 +141,5 @@ The cloud deployment is still a learning baseline. The architecture above descri
 - [Kinesis enhanced fan-out](https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html)
 - [Managed Service for Apache Flink](https://docs.aws.amazon.com/managed-flink/)
 - [AWS Glue Iceberg support](https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-format-iceberg.html)
+- [SageMaker Pipelines](https://docs.aws.amazon.com/sagemaker/latest/dg/pipelines.html)
 - [SageMaker Model Registry](https://docs.aws.amazon.com/sagemaker/latest/dg/model-registry.html)

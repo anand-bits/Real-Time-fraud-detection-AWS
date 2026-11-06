@@ -1,6 +1,6 @@
 # Glue Spark batch processing
 
-This is the automated batch implementation for SentinelPay. A completed raw batch manifest starts the single-batch Glue job. A successful Glue completion manifest then triggers model training. It does not create a SageMaker training job or model endpoint.
+This is the automated batch implementation for SentinelPay. An S3 event on the completed raw batch marker starts the single-batch Glue job. A successful Glue completion manifest then triggers the model-training Lambda and its downstream SageMaker registration pipeline. Glue performs the transformations and split export; the Lambda trains/evaluates the model. SageMaker manages comparison and registration only. This path does not create a SageMaker training job or model endpoint.
 
 ## Data flow
 
@@ -78,8 +78,8 @@ Athena confirmed the four audit rows and returned no payment IDs shared across d
 
 Synthetic generated payment IDs start at `pay_00000001` in every cohort. Glue namespaces payment, decision, label, and account identifiers by batch for every synthetic batch except the original seed-7 training cohort, which is already stored unnamespaced in Silver. This keeps cross-family joins aligned and prevents separate cohorts from producing duplicate Gold matches. Real records are not namespaced.
 
-The Glue job exports Gold data but does not train the Logistic Regression model itself. Its successful run manifest triggers the model-training Lambda described in [the model-training runbook](model-training-lambda.md). The Lambda saves a versioned model and metrics; it does not deploy the model. The current date split cutoffs are for the existing historic cohort; version new temporal boundaries before using later data for retraining, and keep a holdout test set out of training.
+The Glue job exports Gold data but does not train the Logistic Regression model itself. Its successful run manifest triggers the model-training Lambda described in [the model-training and registration runbook](model-training-lambda.md). The Lambda trains/evaluates, then starts SageMaker Pipelines to register only a higher TEST ROC-AUC version. Registered packages require owner approval and are not automatically deployed. The current date split cutoffs are for the existing historic cohort; version new temporal boundaries before using later data for retraining, and keep a holdout test set out of training.
 
 ## Cost and operational limits
 
-Glue charges accrue while the Spark job runs. Start with one small historical batch and inspect its logs, audit rows, and S3 outputs before processing other batches. The job is not yet automatically triggered by S3; adding a completion-manifest trigger and downstream model-training Lambda is a later step.
+Glue charges accrue while the Spark job runs. The completion-marker S3 event starts Glue automatically, so upload all event files first and the marker last. Start with one small historical batch and inspect its logs, audit rows, and S3 outputs before processing other batches. A successful manifest automatically starts the model-training Lambda; model-registration details and approval status are in the [model-training runbook](model-training-lambda.md).

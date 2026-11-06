@@ -21,6 +21,7 @@ from train_baseline import SPLITS, load_split, train_loaded_splits
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
 S3 = boto3.client("s3")
+SAGEMAKER = boto3.client("sagemaker")
 MANIFEST_PREFIX = os.environ.get("MANIFEST_PREFIX", "ops/glue_batch_runs/")
 EXPORT_PREFIX = os.environ.get("EXPORT_PREFIX", "ml/training_exports/glue/")
 MODEL_PREFIX = os.environ.get("MODEL_PREFIX", "ml/models/")
@@ -33,6 +34,23 @@ MINIMUM_FRAUD_ROWS = int(os.environ.get("MIN_FRAUD_ROWS_PER_SPLIT", "10"))
 MINIMUM_LABEL_DELAY_DAYS = int(os.environ.get("MIN_LABEL_DELAY_DAYS", "30"))
 MAX_EXPORT_BYTES = int(os.environ.get("MAX_EXPORT_BYTES", str(2 * 1024**3)))
 TRAINING_LOCK_SECONDS = 20 * 60
+MODEL_REGISTRY_PIPELINE_NAME = os.environ.get("MODEL_REGISTRY_PIPELINE_NAME", "")
+
+
+def start_registry_pipeline(bucket: str, run_id: str, model_key: str, metrics_key: str) -> str | None:
+    """Hand the completed Glue-trained model to the separate SageMaker registry flow."""
+    if not MODEL_REGISTRY_PIPELINE_NAME:
+        LOGGER.info("Model registry pipeline is not configured; leaving trained artifacts in S3")
+        return None
+    response = SAGEMAKER.start_pipeline_execution(
+        PipelineName=MODEL_REGISTRY_PIPELINE_NAME,
+        PipelineParameters=[
+            {"Name": "ModelUri", "Value": f"s3://{bucket}/{model_key}"},
+            {"Name": "MetricsUri", "Value": f"s3://{bucket}/{metrics_key}"},
+            {"Name": "ExportId", "Value": run_id},
+        ],
+    )
+    return response["PipelineExecutionArn"]
 
 
 def object_exists(bucket: str, key: str) -> bool:
@@ -154,7 +172,12 @@ def train_export(
     metrics_key = f"{output_prefix}metrics.json"
     if object_exists(bucket, metrics_key):
         LOGGER.info("Model already trained for export %s; skipping duplicate event", run_id)
-        return {"status": "ALREADY_TRAINED", "export_id": run_id}
+        pipeline_arn = start_registry_pipeline(bucket, run_id, model_key, metrics_key)
+        return {
+            "status": "ALREADY_TRAINED",
+            "export_id": run_id,
+            "registry_pipeline_execution_arn": pipeline_arn,
+        }
 
     lock = acquire_training_lock(bucket, run_id)
     if lock is None:
@@ -163,10 +186,15 @@ def train_export(
     lock_key, lock_etag = lock
 
     try:
-        return _train_export_locked(
+        result = _train_export_locked(
             bucket, manifest_key, manifest, export_prefix, run_id,
             expected_rows, model_key, metrics_key,
         )
+        if result.get("status") in {"TRAINED", "ALREADY_TRAINED"}:
+            result["registry_pipeline_execution_arn"] = start_registry_pipeline(
+                bucket, run_id, model_key, metrics_key
+            )
+        return result
     finally:
         S3.delete_object(Bucket=bucket, Key=lock_key, IfMatch=lock_etag)
 

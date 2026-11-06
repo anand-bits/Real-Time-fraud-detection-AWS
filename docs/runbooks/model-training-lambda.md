@@ -1,4 +1,4 @@
-# Event-triggered model training
+# Event-triggered model training and registration
 
 This runbook describes the SentinelPay model-training Lambda. It trains a versioned Logistic Regression artifact from a successful Glue export. It does not deploy a model to a payment-serving endpoint or replace the currently used model automatically.
 
@@ -12,6 +12,8 @@ This runbook describes the SentinelPay model-training Lambda. It trains a versio
 6. It downloads Parquet files from all three S3 split prefixes. It verifies the 30-day minimum label delay, row counts from the manifest, minimum fraud examples, and no payment-ID overlap.
 7. It trains on TRAIN, selects the probability threshold using VALIDATION, and reports final metrics using TEST.
 8. It writes versioned artifacts to `ml/models/export_id=<glue-run-id>/`. The model file is written first; `metrics.json` is written last and serves as the idempotency marker for duplicate S3 notifications.
+9. The training Lambda starts the separate `sentinelpay-model-registry-dev` SageMaker Pipeline with the model, metrics, and Glue export ID. The pipeline invokes a registry gate that reads the held-out TEST ROC-AUC and compares it with the best completed package in the `sentinelpay-fraud-models-dev` Model Package Group.
+10. A strictly higher TEST ROC-AUC is packaged with an inference entry point and registered as a new model package version with `PendingManualApproval`. Equal or lower scores are not registered; repeated events for the same export do not create a duplicate version. No SageMaker training job or endpoint is created.
 
 Run `scripts/land_complete_batch.py` to upload all event families and automatically publish the completion marker. For manual S3 console uploads, upload all event files first, then upload a matching `batch_complete.json` marker to the path above. The marker is the explicit signal that the batch is complete.
 
@@ -19,30 +21,36 @@ Default maturity gates are 500 TRAIN rows, 100 VALIDATION rows, 100 TEST rows, a
 
 ## Deployment
 
-The function is packaged as a Lambda container image because the existing trainer depends on scikit-learn and PyArrow. Build and push an immutable image tag to the ECR repository created by Terraform, then apply the Lambda resources:
+The function is packaged as a Lambda container image because the existing trainer depends on scikit-learn and PyArrow. The separate registry gate is a small Python Lambda, orchestrated by SageMaker Pipelines. Build and push an immutable image tag to the ECR repository created by Terraform, then apply the Lambda resources:
 
 ```sh
 python3 scripts/package_glue_job_starter.py
+python3 scripts/package_model_registry_lambda.py
 terraform -chdir=infra/terraform fmt
 terraform -chdir=infra/terraform init
+
+SENTINELPAY_REGION=ap-southeast-2 SENTINELPAY_MODEL_IMAGE_TAG=v4 scripts/deploy_model_training_image.sh
+
 terraform -chdir=infra/terraform validate
-terraform -chdir=infra/terraform plan -target=aws_ecr_repository.model_training
-terraform -chdir=infra/terraform apply -target=aws_ecr_repository.model_training
-
-SENTINELPAY_REGION=ap-southeast-2 SENTINELPAY_MODEL_IMAGE_TAG=v3 scripts/deploy_model_training_image.sh
-
-terraform -chdir=infra/terraform plan -target=aws_lambda_function.glue_starter -target=aws_lambda_function.model_training -target=aws_s3_bucket_notification.model_training
-terraform -chdir=infra/terraform apply -target=aws_lambda_function.glue_starter -target=aws_lambda_function.model_training -target=aws_s3_bucket_notification.model_training
+terraform -chdir=infra/terraform plan -out=/tmp/sentinelpay-model-flow.tfplan
+terraform -chdir=infra/terraform apply /tmp/sentinelpay-model-flow.tfplan
 ```
 
-The Glue starter uses a small Python Lambda and can only read batch completion markers and start the configured Glue job. The model-training function uses 3,008 MB memory, 4 GB `/tmp`, and a 15-minute timeout. Its IAM access is scoped to Glue manifests, the three Glue export prefixes, and versioned model outputs in the project bucket. S3 conditional lock objects prevent concurrent duplicate training of the same export; leases expire after 20 minutes if an invocation is terminated. Both function log groups expire after 14 days.
+The Glue starter uses a small Python Lambda and can only read batch completion markers and start the configured Glue job. The model-training function uses 3,008 MB memory, 4 GB `/tmp`, and a 15-minute timeout. Its IAM access is scoped to Glue manifests, the three Glue export prefixes, versioned model outputs, and starting this registry pipeline. The registry gate has S3 access only to the model and candidate artifact prefixes. SageMaker package list/create actions use `Resource: "*"` because SageMaker authorizes these APIs against package ARNs (including a temporary `new` ARN); the gate's code fixes the target to `sentinelpay-fraud-models-dev` and does not accept a package group from pipeline input. S3 conditional lock objects prevent concurrent duplicate training of the same export; leases expire after 20 minutes if an invocation is terminated. Function log groups expire after 14 days.
 
 ## Outputs and operations
 
 - Model: `s3://<bucket>/ml/models/export_id=<glue-run-id>/logistic_regression_baseline.joblib`
 - Metrics: `s3://<bucket>/ml/models/export_id=<glue-run-id>/metrics.json`
 - Logs: `/aws/lambda/sentinelpay-model-trainer-dev`
+- SageMaker Pipeline: `sentinelpay-model-registry-dev`
+- Model Package Group: `sentinelpay-fraud-models-dev`
+- Candidate package artifacts: `s3://<bucket>/ml/models/registry/candidates/export_id=<glue-run-id>/model.tar.gz`
+- Current registered version: `1` (`arn:aws:sagemaker:ap-southeast-2:908768512617:model-package/sentinelpay-fraud-models-dev/1`)
+- Current TEST ROC-AUC: `0.8570074074`; approval status: `PendingManualApproval`
 
-Failed invocations are retried twice. A duplicate event for an export with a completed `metrics.json` is skipped. A run without enough rows or fraud examples is logged as skipped and does not write a model artifact. Each export ID gets its own immutable S3 prefix; model promotion remains a separate approval step.
+Failed invocations are retried twice. A duplicate event for an export with a completed `metrics.json` skips retraining and safely re-enters the registration pipeline. A run without enough rows or fraud examples is logged as skipped and does not write a model artifact. Each export ID gets its own immutable S3 prefix; model package promotion remains a separate manual approval step in SageMaker Model Registry.
+
+To review the current package, open **SageMaker AI → Model Registry → `sentinelpay-fraud-models-dev`** in `ap-southeast-2`, select version 1, and choose **Update approval status** when ready. Approval only changes the package approval status. Endpoint creation and deployment are not wired to this pipeline.
 
 The Lambda is appropriate for the current small synthetic portfolio dataset. If export size or training time approaches the configured Lambda limits, move the training compute to SageMaker or another batch service and keep the completion trigger as the orchestrator.

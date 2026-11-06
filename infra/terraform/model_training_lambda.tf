@@ -249,14 +249,15 @@ resource "aws_lambda_function" "model_training" {
 
   environment {
     variables = {
-      MANIFEST_PREFIX          = local.model_training_manifest_prefix
-      EXPORT_PREFIX            = local.model_training_export_prefix
-      MODEL_PREFIX             = local.model_training_output_prefix
-      MIN_TRAIN_ROWS           = tostring(var.model_training_min_train_rows)
-      MIN_VALIDATION_ROWS      = tostring(var.model_training_min_validation_rows)
-      MIN_TEST_ROWS            = tostring(var.model_training_min_test_rows)
-      MIN_FRAUD_ROWS_PER_SPLIT = tostring(var.model_training_min_fraud_rows_per_split)
-      MIN_LABEL_DELAY_DAYS     = tostring(var.model_training_min_label_delay_days)
+      MANIFEST_PREFIX              = local.model_training_manifest_prefix
+      EXPORT_PREFIX                = local.model_training_export_prefix
+      MODEL_PREFIX                 = local.model_training_output_prefix
+      MIN_TRAIN_ROWS               = tostring(var.model_training_min_train_rows)
+      MIN_VALIDATION_ROWS          = tostring(var.model_training_min_validation_rows)
+      MIN_TEST_ROWS                = tostring(var.model_training_min_test_rows)
+      MIN_FRAUD_ROWS_PER_SPLIT     = tostring(var.model_training_min_fraud_rows_per_split)
+      MIN_LABEL_DELAY_DAYS         = tostring(var.model_training_min_label_delay_days)
+      MODEL_REGISTRY_PIPELINE_NAME = local.model_registry_pipeline_name
     }
   }
 
@@ -264,7 +265,8 @@ resource "aws_lambda_function" "model_training" {
     aws_iam_role_policy_attachment.model_training_logs,
     aws_iam_role_policy.model_training_access,
     aws_cloudwatch_log_group.model_training,
-    aws_ecr_repository_policy.model_training
+    aws_ecr_repository_policy.model_training,
+    aws_iam_role_policy.model_training_pipeline_access
   ]
 }
 

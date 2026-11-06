@@ -11,6 +11,7 @@ This runbook records the working synthetic-data path built so far. It is for a p
 | Silver | Athena Iceberg tables with deduplication and batch-aware identifiers | Historical data has 13,000 unique payment identities; stream replay matched existing events |
 | Gold | `training_examples_gold`, `fraud_daily_metrics_gold`, and `pipeline_audit` | Training examples: 13,000; splits: 10,031 / 1,494 / 1,475 |
 | Baseline ML | Local scikit-learn Logistic Regression trained from Athena Parquet export | Metrics and model saved under `work/ml/baseline/` |
+| Event-driven ML | Glue export manifest triggers model-training Lambda; successful model training starts a separate SageMaker registration pipeline | Model Package Group contains version 1, TEST ROC-AUC 0.8570, pending owner approval |
 
 The ordered Athena SQL is saved under `sql/athena/`, from external Bronze table creation through Silver merges, Gold creation/population, and audit reconciliation. It uses the existing database name, event contracts, batch IDs, and S3 layout. Check the SQL guide before running it in another account.
 
@@ -123,4 +124,4 @@ Stop any browser-based Firehose demo producer after testing. Do not delete raw S
 
 Terraform files live in `infra/terraform/`. Terraform state is local and ignored by Git; do not commit it. The existing S3, Kinesis, and Firehose resources are real AWS resources. Validate and inspect a Terraform plan before applying; apply only when you intend to make the displayed AWS changes. Kinesis and Firehose can incur usage charges even for small demos.
 
-The full architecture's multi-Region, Flink, serving, Redshift, and managed model lifecycle components are not implied by the current workflow. Keep them optional until separately implemented and measured.
+The [implemented data and registration diagram](../../architecture/current-implemented-data-workflow.svg) shows the deployed path. The broader architecture describes target or optional components separately. The current SageMaker pipeline compares model quality and registers improved versions; it does not train a SageMaker job or deploy an endpoint. Multi-Region, Flink, serving, Lake Formation grants, Redshift, temporal backtests, and automated deployment remain future or optional work.

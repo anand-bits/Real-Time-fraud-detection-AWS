@@ -14,6 +14,10 @@ flowchart LR
     ATHENA["Amazon Athena<br/>reconciliation • coverage<br/>split-overlap queries"]
     TRAIN_LAMBDA["Model-training Lambda<br/>maturity and split gates<br/>TRAIN fit • VALIDATION threshold<br/>TEST evaluation"]
     MODEL_ARTIFACTS[("Versioned model artifacts in S3<br/>joblib model • metrics.json")]
+    SAGEMAKER_PIPELINE["SageMaker Pipeline<br/>registration workflow only<br/>no SageMaker training job"]
+    REGISTRY_LAMBDA["Registry gate Lambda<br/>compare TEST ROC-AUC<br/>package only an improvement"]
+    MODEL_REGISTRY[("SageMaker Model Registry<br/>sentinelpay-fraud-models-dev<br/>versioned package group")]
+    APPROVAL["Owner reviews package<br/>PendingManualApproval<br/>approval does not deploy"]
 
     RAW --> BRONZE
     RAW --> GLUE_SILVER
@@ -29,23 +33,27 @@ flowchart LR
     OUTPUTS -. S3 manifest-created event .-> TRAIN_LAMBDA
     TRAIN_LAMBDA -->|S3 GetObject: all 3 Parquet splits| OUTPUTS
     TRAIN_LAMBDA --> MODEL_ARTIFACTS
+    TRAIN_LAMBDA -->|starts after successful export| SAGEMAKER_PIPELINE
+    SAGEMAKER_PIPELINE -->|Lambda step| REGISTRY_LAMBDA
+    REGISTRY_LAMBDA -->|TEST ROC-AUC strictly improves| MODEL_REGISTRY
+    MODEL_REGISTRY --> APPROVAL
   end
 
   SYNTH --> RAW
-  OUTPUTS -->|previous export| MODEL["Existing local Logistic Regression baseline<br/>Test ROC AUC 0.853 • recall 0.536"]
+  MODEL_REGISTRY --> MODEL["Registered version 1<br/>TEST ROC-AUC 0.8570<br/>Pending manual approval"]
 
   subgraph STREAM["Streaming smoke path • verified small batch"]
     direction LR
     PUBLISH["Kinesis publisher<br/>21-record smoke batch"] --> KDS["Kinesis Data Stream"] --> FH["Amazon Data Firehose"] --> RAW
   end
 
-  TF["Terraform-managed baseline resources<br/>S3 • Kinesis • Firehose • Glue • IAM"] -. provisions .-> AWS
+  TF["Terraform-managed resources<br/>S3 • Kinesis • Firehose • Glue • Lambda<br/>SageMaker Pipeline • Model Registry • IAM"] -. provisions .-> AWS
 
   classDef done fill:#eaf4ff,stroke:#3775a8,stroke-width:1.5px,color:#16344d
   classDef store fill:#e9f5eb,stroke:#43815a,stroke-width:1.5px,color:#173b25
   classDef output fill:#fff4dd,stroke:#b9822b,stroke-width:1.5px,color:#4d3510
   classDef model fill:#f1eaff,stroke:#7953a6,stroke-width:1.5px,color:#35204f
-  class SYNTH,BRONZE,GLUE_SILVER,GLUE_GOLD,ATHENA,PUBLISH,KDS,FH,TF,TRAIN_LAMBDA done
-  class RAW,SILVER,GOLD,AUDIT,MODEL_ARTIFACTS store
+  class SYNTH,BRONZE,GLUE_SILVER,GLUE_GOLD,ATHENA,PUBLISH,KDS,FH,TF,TRAIN_LAMBDA,SAGEMAKER_PIPELINE,REGISTRY_LAMBDA,APPROVAL done
+  class RAW,SILVER,GOLD,AUDIT,MODEL_ARTIFACTS,MODEL_REGISTRY store
   class OUTPUTS output
   class MODEL model

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1080" viewBox="0 0 1680 1080" role="img" aria-labelledby="title desc">
+  <title id="title">SentinelPay implemented data and model registration workflow</title>
+  <desc id="desc">Raw batch data enters S3 and starts Glue through a completion marker. Glue updates Silver and Gold Iceberg tables and exports train, validation, and test data. A Lambda trains and evaluates the model, then starts a separate SageMaker Pipeline. A registry Lambda compares test ROC-AUC and registers only an improvement in SageMaker Model Registry for manual approval. It does not deploy a model endpoint.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#53677d"/></marker>
+    <style>
+      .bg{fill:#f5f8fc}.title{font:700 30px sans-serif;fill:#1d3045}.sub{font:15px sans-serif;fill:#4f6378}.band{fill:#fff;stroke:#d3deea;stroke-width:2;rx:20}.bandtitle{font:700 19px sans-serif;fill:#263c53}.node{stroke-width:2;rx:13}.data{fill:#e9f5ee;stroke:#4b8a63}.compute{fill:#eaf2ff;stroke:#477ba7}.model{fill:#f1eaff;stroke:#8063aa}.gate{fill:#fff4df;stroke:#bb852e}.soft{fill:#f2f5f8;stroke:#8192a4}.label{font:700 16px sans-serif;fill:#20364d}.detail{font:13px sans-serif;fill:#40566c}.tiny{font:12px sans-serif;fill:#516579}.arrow{stroke:#53677d;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.dash{stroke-dasharray:8 7}.pill{fill:#fff;stroke:#c7d3df;stroke-width:1.5;rx:9}
+    </style>
+  </defs>
+  <rect class="bg" width="1680" height="1080"/>
+  <text x="48" y="54" class="title">SentinelPay | implemented data and model registration workflow</text>
+  <text x="50" y="84" class="sub">AWS ap-southeast-2 • synthetic data • Glue/Lambda train and evaluate • SageMaker Pipelines compare and register only</text>
+
+  <rect x="38" y="112" width="1604" height="245" class="band"/>
+  <text x="62" y="145" class="bandtitle">1. Batch ingestion, Glue processing, and mature training export</text>
+
+  <rect x="62" y="177" width="205" height="105" class="node data"/>
+  <text x="164" y="208" text-anchor="middle" class="label"><tspan x="164">Raw batch files</tspan><tspan x="164" dy="23" class="detail">S3 raw/ prefixes</tspan><tspan x="164" dy="19" class="detail">gzip JSONL • KMS</tspan></text>
+  <rect x="303" y="177" width="215" height="105" class="node gate"/>
+  <text x="410" y="208" text-anchor="middle" class="label"><tspan x="410">Batch ready marker</tspan><tspan x="410" dy="23" class="detail">S3 event → starter Lambda</tspan><tspan x="410" dy="19" class="detail">deduplicates Glue starts</tspan></text>
+  <rect x="554" y="177" width="220" height="105" class="node compute"/>
+  <text x="664" y="208" text-anchor="middle" class="label"><tspan x="664">AWS Glue Spark job</tspan><tspan x="664" dy="23" class="detail">contract checks • dedupe</tspan><tspan x="664" dy="19" class="detail">Silver / Gold Iceberg MERGE</tspan></text>
+  <rect x="810" y="177" width="235" height="105" class="node data"/>
+  <text x="927" y="208" text-anchor="middle" class="label"><tspan x="927">Silver + Gold tables</tspan><tspan x="927" dy="23" class="detail">point-in-time features</tspan><tspan x="927" dy="19" class="detail">label maturity + audit</tspan></text>
+  <rect x="1081" y="177" width="245" height="105" class="node data"/>
+  <text x="1203" y="208" text-anchor="middle" class="label"><tspan x="1203">S3 Glue export</tspan><tspan x="1203" dy="23" class="detail">TRAIN • VALIDATION • TEST</tspan><tspan x="1203" dy="19" class="detail">run manifest written last</tspan></text>
+  <rect x="1362" y="177" width="245" height="105" class="node soft"/>
+  <text x="1484" y="208" text-anchor="middle" class="label"><tspan x="1484">Athena</tspan><tspan x="1484" dy="23" class="detail">reconciliation and coverage</tspan><tspan x="1484" dy="19" class="detail">audit / split queries</tspan></text>
+  <path d="M267 230 H303" class="arrow"/><path d="M518 230 H554" class="arrow"/><path d="M774 230 H810" class="arrow"/><path d="M1045 230 H1081" class="arrow"/><path d="M1326 230 H1362" class="arrow"/>
+
+  <rect x="38" y="380" width="1604" height="280" class="band"/>
+  <text x="62" y="413" class="bandtitle">2. Lambda training and TEST evaluation, followed by SageMaker orchestration</text>
+  <rect x="62" y="445" width="270" height="145" class="node gate"/>
+  <text x="197" y="478" text-anchor="middle" class="label"><tspan x="197">S3 manifest event</tspan><tspan x="197" dy="24" class="detail">invokes model-training</tspan><tspan x="197" dy="19" class="detail">Lambda after Glue success</tspan><tspan x="197" dy="25" class="tiny">maturity + split gates</tspan></text>
+  <rect x="370" y="445" width="300" height="145" class="node compute"/>
+  <text x="520" y="478" text-anchor="middle" class="label"><tspan x="520">Model-training Lambda</tspan><tspan x="520" dy="24" class="detail">fit on TRAIN</tspan><tspan x="520" dy="19" class="detail">select threshold on VALIDATION</tspan><tspan x="520" dy="19" class="detail">evaluate once on TEST</tspan></text>
+  <rect x="708" y="445" width="250" height="145" class="node data"/>
+  <text x="833" y="478" text-anchor="middle" class="label"><tspan x="833">Versioned S3 artifacts</tspan><tspan x="833" dy="24" class="detail">model.joblib</tspan><tspan x="833" dy="19" class="detail">metrics.json</tspan><tspan x="833" dy="25" class="tiny">TEST ROC-AUC is the gate</tspan></text>
+  <rect x="996" y="445" width="265" height="145" class="node model"/>
+  <text x="1128" y="478" text-anchor="middle" class="label"><tspan x="1128">SageMaker Pipeline</tspan><tspan x="1128" dy="24" class="detail">registration workflow only</tspan><tspan x="1128" dy="19" class="detail">no SageMaker training job</tspan><tspan x="1128" dy="25" class="tiny">triggered by training Lambda</tspan></text>
+  <rect x="1299" y="445" width="308" height="145" class="node model"/>
+  <text x="1453" y="478" text-anchor="middle" class="label"><tspan x="1453">Registry gate Lambda step</tspan><tspan x="1453" dy="24" class="detail">compare candidate TEST ROC-AUC</tspan><tspan x="1453" dy="19" class="detail">with best completed package</tspan><tspan x="1453" dy="25" class="tiny">register only if strictly higher</tspan></text>
+  <path d="M332 517 H370" class="arrow"/><path d="M670 517 H708" class="arrow"/><path d="M958 517 H996" class="arrow"/><path d="M1261 517 H1299" class="arrow"/>
+  <path d="M1203 282 V345 H197 V445" class="arrow dash"/>
+  <text x="425" y="338" class="tiny">Glue success manifest is the export-complete barrier</text>
+
+  <rect x="38" y="684" width="1604" height="316" class="band"/>
+  <text x="62" y="718" class="bandtitle">3. Conditional registration and human approval</text>
+  <rect x="86" y="758" width="340" height="125" class="node gate"/>
+  <text x="256" y="792" text-anchor="middle" class="label"><tspan x="256">Candidate comparison</tspan><tspan x="256" dy="25" class="detail">candidate TEST ROC-AUC</tspan><tspan x="256" dy="21" class="detail">must exceed best registered score</tspan></text>
+  <rect x="512" y="758" width="300" height="125" class="node model"/>
+  <text x="662" y="792" text-anchor="middle" class="label"><tspan x="662">Improvement only</tspan><tspan x="662" dy="25" class="detail">package model.tar.gz</tspan><tspan x="662" dy="21" class="detail">create next package version</tspan></text>
+  <rect x="898" y="758" width="300" height="125" class="node model"/>
+  <text x="1048" y="792" text-anchor="middle" class="label"><tspan x="1048">SageMaker Model Registry</tspan><tspan x="1048" dy="25" class="detail">sentinelpay-fraud-models-dev</tspan><tspan x="1048" dy="21" class="detail">versioned model package group</tspan></text>
+  <rect x="1284" y="758" width="300" height="125" class="node gate"/>
+  <text x="1434" y="792" text-anchor="middle" class="label"><tspan x="1434">Owner reviews version</tspan><tspan x="1434" dy="25" class="detail">PendingManualApproval</tspan><tspan x="1434" dy="21" class="detail">approval does not deploy</tspan></text>
+  <path d="M1453 590 V630 H256 V758" class="arrow"/>
+  <path d="M426 820 H512" class="arrow"/><path d="M812 820 H898" class="arrow"/><path d="M1198 820 H1284" class="arrow"/>
+  <rect x="86" y="915" width="662" height="52" class="pill"/>
+  <text x="417" y="947" text-anchor="middle" class="detail">Equal / lower score → NOT_REGISTERED • duplicate export → no duplicate version</text>
+  <rect x="798" y="915" width="786" height="52" class="pill"/>
+  <text x="1191" y="947" text-anchor="middle" class="detail">Current package v1: TEST ROC-AUC 0.8570 • Pending manual approval • no endpoint deployed</text>
+
+  <text x="48" y="1035" class="sub">Current split: Glue prepares and exports; Lambda trains/evaluates; SageMaker Pipelines compares and manages registration.</text>
+</svg>

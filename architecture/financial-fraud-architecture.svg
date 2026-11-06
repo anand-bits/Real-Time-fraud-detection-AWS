@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1960" height="1450" viewBox="0 0 1960 1450" role="img" aria-labelledby="title desc">
   <title id="title">SentinelPay personal portfolio: production-style fraud architecture</title>
-  <desc id="desc">An advanced target architecture for a personal learning portfolio. Deploy Region A as the single-Region baseline; Region B, cross-Region replication, and the MRSC witness are optional short-lived labs. Each region performs bounded-latency model scoring, maintains regional online features, and writes idempotent decisions. Kinesis and Flink derive velocity features, S3 and Iceberg support investigation and training, and MRSC DynamoDB supports a shared decision ledger with a third-region witness. Security and operations span all accounts and regions.</desc>
+  <desc id="desc">A production-style target architecture for a personal learning portfolio, with the implemented Glue and Lambda training path and separate SageMaker registration workflow shown in the data platform. Region B, cross-Region replication, serving endpoints, Lake Formation grants, Step Functions, and model deployment are target or optional components. The registered model requires owner approval and is not automatically deployed.</desc>
   <defs>
     <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto"><path d="M0,0 L11,5.5 L0,11 z" fill="#52657a"/></marker>
     <marker id="both" markerWidth="11" markerHeight="11" refX="5.5" refY="5.5" orient="auto-start-reverse"><path d="M0,0 L11,5.5 L0,11 z" fill="#6c5796"/></marker>
@@ -10,7 +10,7 @@
   </defs>
   <rect class="bg" width="1960" height="1450"/>
   <text x="40" y="48" class="h1">SentinelPay | personal learning and recruiter showcase</text>
-  <text x="42" y="76" class="small">Synthetic tokenized data • one-Region baseline • optional multi-Region/MRSC lab • production-style controls</text>
+  <text x="42" y="76" class="small">Synthetic data • current Glue/Lambda training + SageMaker registration labeled below • serving and multi-Region components are target/optional</text>
 
   <rect x="40" y="110" width="1880" height="105" class="ops"/>
   <text x="65" y="142" class="h2">Global entry and entity-aware routing</text>
@@ -66,16 +66,17 @@
   <text x="955" y="637" text-anchor="middle" class="tiny">optional relay • origin_region loop guard • controlled failover</text>
 
   <rect x="40" y="990" width="1880" height="255" class="datagroup"/>
-  <text x="65" y="1028" class="h2">Data/model platform • same-account baseline; split-account lab optional</text>
+  <text x="65" y="1028" class="h2">Data/model platform • implemented Glue/Lambda training + SageMaker registration; other services target/optional</text>
   <rect x="75" y="1060" width="300" height="125" class="store"/><text x="225" y="1094" text-anchor="middle" class="label"><tspan x="225">S3 lakehouse</tspan><tspan x="225" dy="23" class="small">raw → bronze → silver → gold</tspan><tspan x="225" dy="21" class="small">Glue Spark + Apache Iceberg</tspan><tspan x="225" dy="21" class="tiny">CDC • dedupe • reconciliation</tspan></text>
-  <rect x="420" y="1060" width="245" height="125" class="card"/><text x="542" y="1094" text-anchor="middle" class="label"><tspan x="542">Catalog + governance</tspan><tspan x="542" dy="23" class="small">Glue Data Catalog</tspan><tspan x="542" dy="21" class="small">Lake Formation grants</tspan><tspan x="542" dy="21" class="tiny">row / column access</tspan></text>
-  <rect x="710" y="1060" width="260" height="125" class="model"/><text x="840" y="1094" text-anchor="middle" class="label"><tspan x="840">SageMaker Pipelines</tspan><tspan x="840" dy="23" class="small">training + temporal backtests</tspan><tspan x="840" dy="21" class="small">leakage / bias / drift checks</tspan><tspan x="840" dy="21" class="tiny">point-in-time feature joins</tspan></text>
-  <rect x="1015" y="1060" width="245" height="125" class="model"/><text x="1137" y="1094" text-anchor="middle" class="label"><tspan x="1137">Model Registry</tspan><tspan x="1137" dy="23" class="small">approval + lineage</tspan><tspan x="1137" dy="21" class="small">champion / challenger</tspan><tspan x="1137" dy="21" class="tiny">rollback gate</tspan></text>
-  <rect x="1305" y="1060" width="245" height="125" class="card"/><text x="1427" y="1094" text-anchor="middle" class="label"><tspan x="1427">Investigation SQL</tspan><tspan x="1427" dy="23" class="small">Athena + governed views</tspan><tspan x="1427" dy="21" class="small">optional Redshift Serverless</tspan><tspan x="1427" dy="21" class="tiny">analyst case workflow</tspan></text>
-  <rect x="1595" y="1060" width="280" height="125" class="ops"/><text x="1735" y="1094" text-anchor="middle" class="label"><tspan x="1735">Step Functions orchestration</tspan><tspan x="1735" dy="23" class="small">replay • reconciliation • retraining</tspan><tspan x="1735" dy="21" class="small">human approval • canary promotion</tspan><tspan x="1735" dy="21" class="tiny">auditable model release</tspan></text>
-  <path d="M375 1122 H420" class="line"/><path d="M665 1122 H710" class="line"/><path d="M970 1122 H1015" class="line"/><path d="M1260 1122 H1305" class="line"/><path d="M1550 1122 H1595" class="line"/>
+  <rect x="420" y="1060" width="245" height="125" class="card"/><text x="542" y="1094" text-anchor="middle" class="label"><tspan x="542">Catalog + governance</tspan><tspan x="542" dy="23" class="small">Glue Data Catalog active</tspan><tspan x="542" dy="21" class="small">Lake Formation grants</tspan><tspan x="542" dy="21" class="tiny">row / column access future</tspan></text>
+  <rect x="710" y="1060" width="260" height="125" class="model"/><text x="840" y="1094" text-anchor="middle" class="label"><tspan x="840">Glue export + Lambda trainer</tspan><tspan x="840" dy="23" class="small">maturity + split gates</tspan><tspan x="840" dy="21" class="small">TRAIN / VALIDATION / TEST</tspan><tspan x="840" dy="21" class="tiny">SageMaker does not train</tspan></text>
+  <rect x="1015" y="1060" width="245" height="125" class="model"/><text x="1137" y="1094" text-anchor="middle" class="label"><tspan x="1137">SageMaker Pipelines</tspan><tspan x="1137" dy="23" class="small">registration workflow only</tspan><tspan x="1137" dy="21" class="small">compare TEST ROC-AUC</tspan><tspan x="1137" dy="21" class="tiny">invoke registry gate Lambda</tspan></text>
+  <rect x="1305" y="1060" width="245" height="125" class="model"/><text x="1427" y="1094" text-anchor="middle" class="label"><tspan x="1427">Model Registry</tspan><tspan x="1427" dy="23" class="small">versioned packages</tspan><tspan x="1427" dy="21" class="small">owner manual approval</tspan><tspan x="1427" dy="21" class="tiny">no automatic deployment</tspan></text>
+  <rect x="1595" y="1060" width="280" height="125" class="ops"/><text x="1735" y="1094" text-anchor="middle" class="label"><tspan x="1735">Analytics / orchestration</tspan><tspan x="1735" dy="23" class="small">Athena investigation active</tspan><tspan x="1735" dy="21" class="small">Redshift / Step Functions</tspan><tspan x="1735" dy="21" class="tiny">optional future components</tspan></text>
+  <path d="M375 1122 H420" class="line"/><path d="M665 1122 H710" class="line"/><path d="M970 1122 H1015" class="line"/><path d="M1260 1122 H1305" class="line"/>
   <path d="M252 830 V960 H225 V1060" class="line"/><path d="M1217 830 V960 H225 V1060" class="line"/>
-  <path d="M840 1060 V965 H745 V385" class="line dash purple"/><path d="M840 1060 V965 H1710 V385" class="line dash purple"/>
+  <path d="M1427 1060 V965 H745 V385" class="line dash purple"/><path d="M1427 1060 V945 H1710 V385" class="line dash purple"/>
+  <text x="1442" y="960" class="tiny">Future manual deployment after owner approval</text>
 
   <rect x="40" y="1280" width="1880" height="125" class="platform"/>
   <text x="65" y="1312" class="h2">Cross-account security, observability, and deployment controls</text>

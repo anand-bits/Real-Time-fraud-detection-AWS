@@ -31,7 +31,7 @@ variable "glue_job_name" {
 variable "model_training_image_tag" {
   description = "Immutable ECR tag for the model-training Lambda container image"
   type        = string
-  default     = "v3"
+  default     = "v4"
 }
 
 variable "model_training_min_train_rows" {
