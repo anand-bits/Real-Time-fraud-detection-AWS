@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "glue_batch_access" {
       test     = "StringLike"
       variable = "s3:prefix"
       values = [
-        "raw/*", "silver/*", "gold/*", "quarantine/*", "ops/*",
+        "raw/*", "silver/*", "curated/iceberg/*", "gold/*", "quarantine/*", "ops/*",
         "tmp/glue/*", "ml/training_exports/glue/*", "artifacts/glue/*"
       ]
     }
@@ -48,7 +48,9 @@ data "aws_iam_policy_document" "glue_batch_access" {
     resources = [
       "${aws_s3_bucket.raw.arn}/raw/*",
       "${aws_s3_bucket.raw.arn}/silver/*",
+      "${aws_s3_bucket.raw.arn}/curated/iceberg/*",
       "${aws_s3_bucket.raw.arn}/gold/*",
+      "${aws_s3_bucket.raw.arn}/ops/*",
       "${aws_s3_bucket.raw.arn}/artifacts/glue/*"
     ]
   }
@@ -63,6 +65,7 @@ data "aws_iam_policy_document" "glue_batch_access" {
     ]
     resources = [
       "${aws_s3_bucket.raw.arn}/silver/*",
+      "${aws_s3_bucket.raw.arn}/curated/iceberg/*",
       "${aws_s3_bucket.raw.arn}/gold/*",
       "${aws_s3_bucket.raw.arn}/quarantine/*",
       "${aws_s3_bucket.raw.arn}/ops/*",
@@ -77,6 +80,7 @@ data "aws_iam_policy_document" "glue_batch_access" {
     actions = ["s3:DeleteObject"]
     resources = [
       "${aws_s3_bucket.raw.arn}/silver/*",
+      "${aws_s3_bucket.raw.arn}/curated/iceberg/*",
       "${aws_s3_bucket.raw.arn}/gold/*",
       "${aws_s3_bucket.raw.arn}/ops/*",
       "${aws_s3_bucket.raw.arn}/tmp/glue/*",

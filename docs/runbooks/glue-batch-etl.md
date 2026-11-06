@@ -58,6 +58,12 @@ The job arguments for bucket, database, quarantine prefix, Gold export prefix, s
 
 Silver, Gold, and audit writes use Iceberg `MERGE`, so replaying the same event IDs updates matching rows instead of appending duplicate keys. Each execution writes a separate quarantine/run manifest/export prefix. Raw objects are never deleted or rewritten by this job.
 
+### Verified run (2026-11-06)
+
+Glue run `jr_9a1861325cb865d59cd245cd5b8cb913e8a06de8299305f26df3e6d417c2a6aa` completed with `SUCCEEDED` for `ingest_date=2026-11-04`, `batch_id=bronze-10k-seed7-20261104` in 169 seconds. The run manifest is under the path above. Payments reconciled 10,200 deliveries to 10,000 unique events with 200 duplicates (`PASS_WITH_DEDUP`); each of feature updates, fraud decisions, and chargeback outcomes processed 10,000 records with no duplicates or quarantines (`PASS`). Gold contained 13,000 training rows split into 10,031 train, 1,494 validation, and 1,475 test rows. The run-specific Parquet export exists at the corresponding `training_export_uri` in the manifest.
+
+Athena confirmed the four audit rows and returned no payment IDs shared across dataset splits. This run also fixed four implementation gaps found during execution: the script now reads Glue's reserved run ID without registering it twice, merges against the existing Silver table schemas, materializes deduplicated sources before Iceberg `MERGE`, and applies shared validation checks only to fields present in each event contract. The job role policy now covers the actual `curated/iceberg/` and `ops/` table locations.
+
 The `namespace_batches` setting is there for the two existing synthetic validation/test batches, whose generated payment IDs overlap the training batch. Do not use that special mapping for real globally unique identifiers. If more independent synthetic cohorts are generated, add their batch IDs to the configured list so related payment, feature, decision, and outcome identifiers remain aligned.
 
 The Gold export is data preparation only. The Glue job does not train the Logistic Regression model. Later, a post-success quality gate can start Lambda, which can submit a separate SageMaker training job once enough outcome labels have matured. The current date split cutoffs are for the existing historic cohort; version new temporal boundaries before using later data for retraining, and keep a holdout test set out of training.

@@ -126,10 +126,18 @@ NAMESPACE_PREFIX = {
 
 def options() -> dict[str, str]:
     return getResolvedOptions(sys.argv, [
-        "JOB_NAME", "JOB_RUN_ID", "bucket", "database", "ingest_date", "batch_id",
+        "JOB_NAME", "bucket", "database", "ingest_date", "batch_id",
         "namespace_batches", "quarantine_prefix", "export_prefix", "train_cutoff",
         "validation_cutoff", "max_invalid_fraction",
     ])
+
+
+def glue_run_id() -> str:
+    """Read Glue's reserved run ID without asking getResolvedOptions to register it twice."""
+    try:
+        return sys.argv[sys.argv.index("--JOB_RUN_ID") + 1]
+    except (ValueError, IndexError) as exc:
+        raise RuntimeError("Glue did not provide --JOB_RUN_ID") from exc
 
 
 def valid_token(value: str, regex: str) -> F.Column:
@@ -137,13 +145,16 @@ def valid_token(value: str, regex: str) -> F.Column:
 
 
 def validation_rules(event_type: str) -> list[tuple[str, F.Column]]:
+    field_names = {name for name, _ in EVENTS[event_type]["fields"]}
     rules: list[tuple[str, F.Column]] = [
         ("MALFORMED_JSON", F.col("_corrupt_record").isNotNull()),
         ("NOT_SYNTHETIC", F.col("data_classification").isNull() | (F.col("data_classification") != F.lit("SYNTHETIC"))),
         ("UNSUPPORTED_SCHEMA_VERSION", F.col("schema_version").isNull() | (F.col("schema_version") != F.lit(1))),
-        ("INVALID_SOURCE_REGION", ~valid_token("source_region", ID_PATTERNS["source_region"])),
-        ("INVALID_TRACE_ID", ~valid_token("trace_id", ID_PATTERNS["trace_id"])),
     ]
+    if "source_region" in field_names:
+        rules.append(("INVALID_SOURCE_REGION", ~valid_token("source_region", ID_PATTERNS["source_region"])))
+    if "trace_id" in field_names:
+        rules.append(("INVALID_TRACE_ID", ~valid_token("trace_id", ID_PATTERNS["trace_id"])))
     for field_name, _ in EVENTS[event_type]["fields"]:
         if field_name not in ("ingest_date", "batch_id", "data_classification", "schema_version"):
             rules.append((f"MISSING_{field_name.upper()}", F.col(field_name).isNull()))
@@ -306,7 +317,12 @@ def namespace_synthetic_ids(df: DataFrame, event_type: str, namespace_batches: s
 def merge_into_iceberg(spark: Any, df: DataFrame, database: str, event_type: str) -> int:
     spec = EVENTS[event_type]
     key = spec["key"]
-    columns = [name for name, _ in spec["fields"]]
+    target = f"glue_catalog.{database}.{spec['silver']}"
+    target_columns = set(spark.table(target).columns)
+    # Existing Silver Iceberg tables predate the Glue batch job and do not
+    # carry ingest_date/batch_id columns. Keep those identifiers for validation,
+    # namespacing, and the pipeline audit, but merge only the live table schema.
+    columns = [name for name, _ in spec["fields"] if name in target_columns]
     ready = df.select(*columns)
     dedupe_window = Window.partitionBy(key).orderBy(
         F.col(spec["order"]).asc_nulls_last(), F.col("source_s3_uri").asc_nulls_last()
@@ -315,12 +331,14 @@ def merge_into_iceberg(spark: Any, df: DataFrame, database: str, event_type: str
         deduped = df.withColumn("_dedupe_rank", F.row_number().over(dedupe_window)).where(F.col("_dedupe_rank") == 1).drop("_dedupe_rank").select(*columns)
     else:
         deduped = ready.dropDuplicates([key])
+    # Iceberg MERGE rewrites the source as a correlated subquery. Truncate the
+    # row_number/dedup lineage so Spark does not reject it as nondeterministic.
+    deduped = deduped.localCheckpoint(eager=True)
     source_count = deduped.count()
     if source_count == 0:
         return 0
     view = f"source_{event_type}"
     deduped.createOrReplaceTempView(view)
-    target = f"glue_catalog.{database}.{spec['silver']}"
     update_list = ",\n            ".join(f"t.`{c}` = s.`{c}`" for c in columns if c != key)
     insert_columns = ", ".join(f"`{c}`" for c in columns)
     insert_values = ", ".join(f"s.`{c}`" for c in columns)
@@ -523,7 +541,7 @@ def main() -> None:
     database = args["database"]
     ingest_date = args["ingest_date"]
     batch_id = args["batch_id"]
-    run_id = args["JOB_RUN_ID"]
+    run_id = glue_run_id()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ingest_date):
         raise ValueError("ingest_date must be YYYY-MM-DD")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", batch_id):
