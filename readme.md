@@ -16,14 +16,14 @@ SentinelPay scores synthetic, tokenized card-not-present payment requests and ev
 - [Step 1 charter](docs/adr/000-project-charter.md)
 - [Architecture decision records](docs/adr/)
 
-The first diagram shows the deployed single-Region data and model-registration path. The broader diagram is a production-style target; serving endpoints, Region B, cross-Region replication, Lake Formation row/column grants, and automated deployment remain future or optional work.
+The first diagram shows the deployed single-Region data and model-registration path. A separately created SageMaker demo endpoint now serves approved package version 4. The broader diagram remains a production-style target; production authorization integration, Region B, cross-Region replication, Lake Formation row/column grants, and automated deployment remain future or optional work.
 
 ## What the project demonstrates
 
 - **Authorization:** API Gateway/WAF, bounded decision service, local feature lookup, SageMaker inference, rules fallback, idempotent result, and stable event key.
 - **Streaming:** Kinesis Data Streams, Managed Apache Flink event-time windows, late-event handling, quarantine, and controlled replay.
 - **Lakehouse:** S3 and Iceberg bronze/silver/gold tables, Glue transformations/catalog, reconciliation, and Athena investigation. Redshift Serverless is optional.
-- **ML lifecycle:** Glue exports mature, point-in-time splits; a Lambda trains on TRAIN, chooses the threshold on VALIDATION, and evaluates TEST. SageMaker Pipelines compares TEST ROC-AUC and registers only improvements for owner approval. Temporal backtests, bias/drift review, endpoint deployment, canary, and rollback remain future work.
+- **ML lifecycle:** Glue exports mature, point-in-time splits; a Lambda trains on TRAIN, chooses the threshold on VALIDATION, and evaluates TEST. SageMaker Pipelines compares TEST ROC-AUC and registers improvements for owner approval. An owner can manually deploy an approved package to the demo endpoint; the endpoint is not updated automatically. Temporal backtests, bias/drift review, canary, and rollback remain future work.
 - **Operations:** Terraform, least-privilege roles, encryption, observability, CI, runbooks, load tests, and failure exercises.
 
 ## Personal-project deployment strategy
@@ -120,7 +120,7 @@ The implemented data engineering slice is documented in [the current data workfl
 
 The automated Glue Spark batch job is documented in [the Glue batch runbook](docs/runbooks/glue-batch-etl.md). A completed S3 batch marker starts the job; it processes one raw batch, quarantines invalid rows, merges Silver and Gold Iceberg tables, exports the split training dataset, and writes reconciliation status. It can also be started manually for recovery.
 
-The Glue success manifest triggers a container-based model-training Lambda. It reads the S3 TRAIN, VALIDATION, and TEST Parquet splits, checks label maturity and minimum sample gates, trains a versioned Logistic Regression artifact, and writes metrics to S3. That Lambda starts the separate SageMaker registration pipeline; a registry gate compares TEST ROC-AUC and registers a higher-scoring version as `PendingManualApproval`. The current group contains version 1 with TEST ROC-AUC 0.8570. Approval does not deploy an endpoint. See [the model-training and registration runbook](docs/runbooks/model-training-lambda.md).
+The Glue success manifest triggers a container-based model-training Lambda. It reads the S3 TRAIN, VALIDATION, and TEST Parquet splits, checks label maturity and minimum sample gates, trains a versioned Logistic Regression artifact, and writes metrics to S3. That Lambda starts the separate SageMaker registration pipeline; a registry gate compares TEST ROC-AUC and registers a higher-scoring version as `PendingManualApproval`. Package version 4 (TEST ROC-AUC 0.8570) has a corrected serving package and is deployed to the manually managed demo endpoint `Endpoint-20261107-v4`. New model registrations still do not update the endpoint automatically. See [the model-training and registration runbook](docs/runbooks/model-training-lambda.md).
 
 The cloud deployment is still a learning baseline. The architecture above describes the broader target, while the runbook distinguishes built steps from optional or future components. Running the S3 landing, Terraform, or Kinesis sections makes AWS changes and may incur charges.
 

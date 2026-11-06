@@ -55,6 +55,20 @@ def output_fn(prediction, accept):
     return json.dumps(prediction), "application/json"
 '''
 
+# The SageMaker Scikit-learn container runs `pip install .` from `code/` when
+# SAGEMAKER_PROGRAM is set. A lone inference.py is not guaranteed to be added
+# to the installed wheel, which can leave the serving process unable to import
+# the configured program. Explicitly declare it as a top-level Python module.
+INFERENCE_SETUP = '''from setuptools import setup
+
+setup(
+    name="sentinelpay-inference",
+    version="1.0.0",
+    packages=["inference"],
+    package_dir={"inference": "inference"},
+)
+'''
+
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
     parsed = urlparse(uri)
@@ -120,8 +134,10 @@ def lambda_handler(event: dict, context: object) -> dict:
         root = Path(temp_dir)
         S3.download_file(model_bucket, model_key, str(root / "logistic_regression_baseline.joblib"))
         code_dir = root / "code"
-        code_dir.mkdir()
-        (code_dir / "inference.py").write_text(INFERENCE_CODE)
+        inference_package = code_dir / "inference"
+        inference_package.mkdir(parents=True)
+        (inference_package / "__init__.py").write_text(INFERENCE_CODE)
+        (code_dir / "setup.py").write_text(INFERENCE_SETUP)
         archive_path = root / "model.tar.gz"
         with tarfile.open(archive_path, "w:gz") as archive:
             archive.add(root / "logistic_regression_baseline.joblib", arcname="logistic_regression_baseline.joblib")
@@ -141,7 +157,10 @@ def lambda_handler(event: dict, context: object) -> dict:
             "Containers": [{
                 "Image": INFERENCE_IMAGE,
                 "ModelDataUrl": f"s3://{model_bucket}/{artifact_key}",
-                "Environment": {"SAGEMAKER_PROGRAM": "inference.py"},
+                "Environment": {
+                    "SAGEMAKER_PROGRAM": "inference.py",
+                    "SAGEMAKER_SUBMIT_DIRECTORY": "/opt/ml/model/code",
+                },
             }],
             "SupportedContentTypes": ["application/json", "text/csv"],
             "SupportedResponseMIMETypes": ["application/json"],

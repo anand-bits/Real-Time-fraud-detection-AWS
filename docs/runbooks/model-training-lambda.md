@@ -1,6 +1,6 @@
 # Event-triggered model training and registration
 
-This runbook describes the SentinelPay model-training Lambda. It trains a versioned Logistic Regression artifact from a successful Glue export. It does not deploy a model to a payment-serving endpoint or replace the currently used model automatically.
+This runbook describes the SentinelPay model-training Lambda. It trains a versioned Logistic Regression artifact from a successful Glue export. Model package registration is separate from endpoint deployment: approved packages must be deployed manually, and a new package never replaces the endpoint automatically.
 
 ## Trigger and data flow
 
@@ -13,7 +13,7 @@ This runbook describes the SentinelPay model-training Lambda. It trains a versio
 7. It trains on TRAIN, selects the probability threshold using VALIDATION, and reports final metrics using TEST.
 8. It writes versioned artifacts to `ml/models/export_id=<glue-run-id>/`. The model file is written first; `metrics.json` is written last and serves as the idempotency marker for duplicate S3 notifications.
 9. The training Lambda starts the separate `sentinelpay-model-registry-dev` SageMaker Pipeline with the model, metrics, and Glue export ID. The pipeline invokes a registry gate that reads the held-out TEST ROC-AUC and compares it with the best completed package in the `sentinelpay-fraud-models-dev` Model Package Group.
-10. A strictly higher TEST ROC-AUC is packaged with an inference entry point and registered as a new model package version with `PendingManualApproval`. Equal or lower scores are not registered; repeated events for the same export do not create a duplicate version. No SageMaker training job or endpoint is created.
+10. A strictly higher TEST ROC-AUC is packaged with an inference package and registered as a new model package version with `PendingManualApproval`. The package points `SAGEMAKER_SUBMIT_DIRECTORY` at `/opt/ml/model/code`. Equal or lower scores are not registered; repeated events for the same export do not create a duplicate version. The pipeline does not create or update an endpoint.
 
 Run `scripts/land_complete_batch.py` to upload all event families and automatically publish the completion marker. For manual S3 console uploads, upload all event files first, then upload a matching `batch_complete.json` marker to the path above. The marker is the explicit signal that the batch is complete.
 
@@ -46,11 +46,27 @@ The Glue starter uses a small Python Lambda and can only read batch completion m
 - SageMaker Pipeline: `sentinelpay-model-registry-dev`
 - Model Package Group: `sentinelpay-fraud-models-dev`
 - Candidate package artifacts: `s3://<bucket>/ml/models/registry/candidates/export_id=<glue-run-id>/model.tar.gz`
-- Current registered version: `1` (`arn:aws:sagemaker:ap-southeast-2:908768512617:model-package/sentinelpay-fraud-models-dev/1`)
-- Current TEST ROC-AUC: `0.8570074074`; approval status: `PendingManualApproval`
+- Current working serving package: `4` (`arn:aws:sagemaker:ap-southeast-2:908768512617:model-package/sentinelpay-fraud-models-dev/4`)
+- TEST ROC-AUC: `0.8570074074`; approval status: `Approved`. Version 4 uses the existing trained weights and corrects the inference package path; it is not a newly trained model.
 
 Failed invocations are retried twice. A duplicate event for an export with a completed `metrics.json` skips retraining and safely re-enters the registration pipeline. A run without enough rows or fraud examples is logged as skipped and does not write a model artifact. Each export ID gets its own immutable S3 prefix; model package promotion remains a separate manual approval step in SageMaker Model Registry.
 
-To review the current package, open **SageMaker AI → Model Registry → `sentinelpay-fraud-models-dev`** in `ap-southeast-2`, select version 1, and choose **Update approval status** when ready. Approval only changes the package approval status. Endpoint creation and deployment are not wired to this pipeline.
+To review packages, open **SageMaker AI → Model Registry → `sentinelpay-fraud-models-dev`** in `ap-southeast-2`. The registry pipeline registers improved candidates as `PendingManualApproval`; an owner reviews and approves the candidate. Approval alone does not deploy it.
+
+## Demo endpoint
+
+Package version 4 is manually deployed to `Endpoint-20261107-v4` in `ap-southeast-2`, using one `ml.c6i.large` instance. The earlier endpoint attempts `Endpoint-20261106-110549` and `Endpoint-20261107-v3` used incorrect inference code paths; version 2 and 3 are rejected in Model Registry. Version 4 passes the container health check and a test invocation.
+
+The endpoint accepts one or more feature rows in this order: `amount`, `device_first_seen_days`, `transaction_count_1h`, `amount_sum_1h`, `distinct_merchant_count_1h`, `new_device_count_1h`, `currency`, `channel`, `country_code`.
+
+```json
+{"instances":[[125.50,14,3,280.0,2,1,"AUD","CARD_NOT_PRESENT","AU"]]}
+```
+
+The tested response was fraud probability `0.548069`, prediction `0`, with threshold `0.648958`. This is a synthetic demo request. The real-time endpoint incurs instance charges while it is running; delete it when the demo is finished. For example:
+
+```sh
+aws sagemaker delete-endpoint --endpoint-name Endpoint-20261107-v4 --region ap-southeast-2
+```
 
 The Lambda is appropriate for the current small synthetic portfolio dataset. If export size or training time approaches the configured Lambda limits, move the training compute to SageMaker or another batch service and keep the completion trigger as the orchestrator.
