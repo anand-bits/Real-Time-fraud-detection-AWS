@@ -1,6 +1,6 @@
 # Glue Spark batch processing
 
-This is the first automated batch implementation for SentinelPay. It is a manually started, single-batch job. It does not create an S3 event trigger, Lambda, SageMaker training job, or model endpoint.
+This is the automated batch implementation for SentinelPay. A completed raw batch manifest starts the single-batch Glue job. A successful Glue completion manifest then triggers model training. It does not create a SageMaker training job or model endpoint.
 
 ## Data flow
 
@@ -36,6 +36,18 @@ terraform -chdir=infra/terraform plan
 
 Review the plan before applying. The Kinesis and Firehose Terraform files are currently `.tf.paused`; Terraform will plan to remove those resources from state while creating the Glue job. Confirm the plan leaves the raw S3 bucket and its objects untouched. Do not apply a plan that proposes deleting the bucket.
 
+## Automatically start a batch from its completion marker
+
+Use `scripts/land_complete_batch.py` to upload all four event families. It writes `raw/metadata/ingest_date=<date>/batch_id=<batch>/batch_complete.json` only after all data objects and source manifests have been uploaded. S3 invokes `sentinelpay-glue-starter-dev` for that marker, and the starter starts Glue with the marker's `ingest_date` and `batch_id`.
+
+For data uploaded manually in the S3 console, upload all event objects first, then upload a JSON marker at that exact path, for example:
+
+```json
+{"manifest_version":1,"status":"READY","ingest_date":"2026-11-06","batch_id":"my-historic-batch"}
+```
+
+The marker path and body values must match. Uploading data objects without this final marker does not start Glue, because S3 cannot determine when a multi-file batch is complete.
+
 ## Start one batch manually
 
 After the Glue job is deployed, start one completed batch. This example uses the existing historical 10k batch and the current S3 ingest date:
@@ -64,9 +76,9 @@ Glue run `jr_9a1861325cb865d59cd245cd5b8cb913e8a06de8299305f26df3e6d417c2a6aa` c
 
 Athena confirmed the four audit rows and returned no payment IDs shared across dataset splits. This run also fixed four implementation gaps found during execution: the script now reads Glue's reserved run ID without registering it twice, merges against the existing Silver table schemas, materializes deduplicated sources before Iceberg `MERGE`, and applies shared validation checks only to fields present in each event contract. The job role policy now covers the actual `curated/iceberg/` and `ops/` table locations.
 
-The `namespace_batches` setting is there for the two existing synthetic validation/test batches, whose generated payment IDs overlap the training batch. Do not use that special mapping for real globally unique identifiers. If more independent synthetic cohorts are generated, add their batch IDs to the configured list so related payment, feature, decision, and outcome identifiers remain aligned.
+Synthetic generated payment IDs start at `pay_00000001` in every cohort. Glue namespaces payment, decision, label, and account identifiers by batch for every synthetic batch except the original seed-7 training cohort, which is already stored unnamespaced in Silver. This keeps cross-family joins aligned and prevents separate cohorts from producing duplicate Gold matches. Real records are not namespaced.
 
-The Gold export is data preparation only. The Glue job does not train the Logistic Regression model. Later, a post-success quality gate can start Lambda, which can submit a separate SageMaker training job once enough outcome labels have matured. The current date split cutoffs are for the existing historic cohort; version new temporal boundaries before using later data for retraining, and keep a holdout test set out of training.
+The Glue job exports Gold data but does not train the Logistic Regression model itself. Its successful run manifest triggers the model-training Lambda described in [the model-training runbook](model-training-lambda.md). The Lambda saves a versioned model and metrics; it does not deploy the model. The current date split cutoffs are for the existing historic cohort; version new temporal boundaries before using later data for retraining, and keep a holdout test set out of training.
 
 ## Cost and operational limits
 

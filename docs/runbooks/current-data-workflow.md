@@ -94,7 +94,7 @@ Select the Athena workgroup and database `sentinelpay`. Run the saved SQL in [`s
 
 These SQL files reproduce the lakehouse steps. Existing tables created earlier with `IF NOT EXISTS` will remain as-is; use a clean database for a full rebuild. Compare `SHOW CREATE TABLE` output against the files before applying changes to existing tables.
 
-For the new Glue-based automated path, see the dedicated [Glue batch ETL runbook](glue-batch-etl.md). It processes raw partitions and merges to the same Silver and Gold tables; Athena SQL remains available for inspection and manual recovery.
+For the Glue-based automated path, use `scripts/land_complete_batch.py` to upload all four event families and write the final batch-ready marker. S3 starts Glue from that marker; Glue's successful export manifest then triggers model training. See the [Glue batch ETL runbook](glue-batch-etl.md) for the marker format and manual S3 upload procedure. Athena SQL remains available for inspection and recovery.
 
 ## 6. Export and train the baseline
 

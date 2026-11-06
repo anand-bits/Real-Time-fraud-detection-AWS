@@ -46,7 +46,7 @@ resource "aws_glue_job" "batch_processing" {
     "--conf"                             = local.glue_iceberg_spark_conf
     "--bucket"                           = aws_s3_bucket.raw.bucket
     "--database"                         = var.glue_database
-    "--namespace_batches"                = "validation-1500-seed17-20260601,test-1500-seed29-20260901"
+    "--namespace_batches"                = "*"
     "--quarantine_prefix"                = "quarantine/records"
     "--export_prefix"                    = "ml/training_exports/glue"
     "--train_cutoff"                     = "2026-06-01"

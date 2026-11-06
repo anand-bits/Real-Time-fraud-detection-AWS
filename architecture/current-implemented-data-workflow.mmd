@@ -1,0 +1,51 @@
+flowchart LR
+  SYNTH["Synthetic event generator<br/>Payments • feature updates • decisions • chargebacks<br/>10k train + 1.5k validation + 1.5k test"]
+
+  subgraph AWS["AWS single-Region data workflow • ap-southeast-2"]
+    direction LR
+    RAW[("Amazon S3 raw zone<br/>gzip JSONL batches<br/>KMS encryption")]
+    BRONZE["Athena Bronze external tables<br/>4 event families"]
+    GLUE_SILVER["AWS Glue 5.0 • raw to Silver<br/>contract validation • dedupe<br/>quarantine invalid records"]
+    SILVER[("Iceberg Silver tables<br/>payments • features<br/>decisions • outcomes")]
+    GLUE_GOLD["AWS Glue 5.0 • Silver to Gold<br/>point-in-time joins • label maturity"]
+    GOLD[("Iceberg Gold tables<br/>training examples<br/>daily fraud metrics")]
+    AUDIT[("Pipeline audit<br/>per-batch counts and status")]
+    OUTPUTS["Run outputs in S3<br/>manifest • quarantine<br/>split Parquet export"]
+    ATHENA["Amazon Athena<br/>reconciliation • coverage<br/>split-overlap queries"]
+    TRAIN_LAMBDA["Model-training Lambda<br/>maturity and split gates<br/>TRAIN fit • VALIDATION threshold<br/>TEST evaluation"]
+    MODEL_ARTIFACTS[("Versioned model artifacts in S3<br/>joblib model • metrics.json")]
+
+    RAW --> BRONZE
+    RAW --> GLUE_SILVER
+    GLUE_SILVER --> SILVER
+    SILVER --> GLUE_GOLD
+    GLUE_GOLD --> GOLD
+    GLUE_GOLD --> AUDIT
+    GLUE_GOLD --> OUTPUTS
+    BRONZE --> ATHENA
+    SILVER --> ATHENA
+    GOLD --> ATHENA
+    AUDIT --> ATHENA
+    OUTPUTS -. S3 manifest-created event .-> TRAIN_LAMBDA
+    TRAIN_LAMBDA -->|S3 GetObject: all 3 Parquet splits| OUTPUTS
+    TRAIN_LAMBDA --> MODEL_ARTIFACTS
+  end
+
+  SYNTH --> RAW
+  OUTPUTS -->|previous export| MODEL["Existing local Logistic Regression baseline<br/>Test ROC AUC 0.853 • recall 0.536"]
+
+  subgraph STREAM["Streaming smoke path • verified small batch"]
+    direction LR
+    PUBLISH["Kinesis publisher<br/>21-record smoke batch"] --> KDS["Kinesis Data Stream"] --> FH["Amazon Data Firehose"] --> RAW
+  end
+
+  TF["Terraform-managed baseline resources<br/>S3 • Kinesis • Firehose • Glue • IAM"] -. provisions .-> AWS
+
+  classDef done fill:#eaf4ff,stroke:#3775a8,stroke-width:1.5px,color:#16344d
+  classDef store fill:#e9f5eb,stroke:#43815a,stroke-width:1.5px,color:#173b25
+  classDef output fill:#fff4dd,stroke:#b9822b,stroke-width:1.5px,color:#4d3510
+  classDef model fill:#f1eaff,stroke:#7953a6,stroke-width:1.5px,color:#35204f
+  class SYNTH,BRONZE,GLUE_SILVER,GLUE_GOLD,ATHENA,PUBLISH,KDS,FH,TF,TRAIN_LAMBDA done
+  class RAW,SILVER,GOLD,AUDIT,MODEL_ARTIFACTS store
+  class OUTPUTS output
+  class MODEL model
