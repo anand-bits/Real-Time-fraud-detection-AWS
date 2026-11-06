@@ -111,6 +111,14 @@ Implementation folders are placeholders. Never commit credentials, account-speci
 9. Run bounded load/failure tests and publish results.
 10. Optionally compare multi-Region MREC/MRSC behavior and costs, then tear down the lab.
 
+## Current reproducible data workflow
+
+The implemented data engineering slice is documented in [the current data workflow runbook](docs/runbooks/current-data-workflow.md). It covers deterministic synthetic batch generation, landing to S3, Athena Bronze/Silver/Gold processing, reconciliation, streaming smoke checks, training export, and the Logistic Regression baseline. Saved Athena verification queries are in [sql/athena](sql/athena/README.md).
+
+The first automated Glue Spark batch job is documented in [the Glue batch runbook](docs/runbooks/glue-batch-etl.md). It processes one raw batch, quarantines invalid rows, merges Silver and Gold Iceberg tables, exports the split training dataset, and writes reconciliation status. It is a manually started ETL job; model retraining remains a separate future Lambda/SageMaker stage.
+
+The cloud deployment is still a learning baseline. The architecture above describes the broader target, while the runbook distinguishes built steps from optional or future components. Running the S3 landing, Terraform, or Kinesis sections makes AWS changes and may incur charges.
+
 ## Portfolio quality gates
 
 - No real cardholder/customer data or secrets.

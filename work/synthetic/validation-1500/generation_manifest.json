@@ -1,0 +1,15 @@
+{
+  "base_time": "2026-06-01T00:00:00.000Z",
+  "data_classification": "SYNTHETIC",
+  "delivered_payment_record_count": 1530,
+  "duplicate_rate": 0.02,
+  "duplicate_record_count": 30,
+  "generator_version": 1,
+  "label_delay_days": 30,
+  "late_event_count": 75,
+  "late_rate": 0.05,
+  "seed": 17,
+  "simulated_fraud_count": 147,
+  "source_region": "us-east-1",
+  "unique_payment_count": 1500
+}
