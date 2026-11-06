@@ -122,6 +122,7 @@ NAMESPACE_PREFIX = {
     "merchant_id": ("mer_", 5),
     "device_token": ("dtok_", 6),
 }
+UNNAMESPACED_SYNTHETIC_BATCHES = {"bronze-10k-seed7-20261104"}
 
 
 def options() -> dict[str, str]:
@@ -285,9 +286,21 @@ def quarantine(invalid: DataFrame, bucket: str, prefix: str, run_id: str) -> Non
 
 
 def namespace_synthetic_ids(df: DataFrame, event_type: str, namespace_batches: set[str]) -> DataFrame:
+    # The original seed-7 cohort is already stored in Silver with its original
+    # payment IDs. Namespace every other synthetic batch by batch_id so common
+    # generator IDs such as pay_00000001 cannot collide across independent runs.
+    # Retain the explicit list behavior for existing batches and allow '*' for
+    # the automated path that accepts new batch IDs without Terraform edits.
+    selected_batches = namespace_batches - {"*"}
+    is_selected = F.col("batch_id").isin(sorted(selected_batches)) if selected_batches else F.lit(False)
+    should_namespace = (
+        (F.col("data_classification") == F.lit("SYNTHETIC"))
+        & (~F.col("batch_id").isin(sorted(UNNAMESPACED_SYNTHETIC_BATCHES)))
+        & (F.lit("*" in namespace_batches) | is_selected)
+    )
     if not namespace_batches:
         return df
-    needs_namespace = F.col("batch_id").isin(sorted(namespace_batches))
+    needs_namespace = should_namespace
     if event_type == "payments":
         for name, (prefix, start) in NAMESPACE_PREFIX.items():
             df = df.withColumn(

@@ -74,24 +74,28 @@ def score_split(y_true: np.ndarray, probabilities: np.ndarray, threshold: float)
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--input-dir",
-        default="work/ml/training-export",
-        help="Root directory containing dataset_split=... Parquet folders.",
-    )
-    parser.add_argument("--output-dir", default="work/ml/baseline")
-    args = parser.parse_args()
-
-    root = Path(args.input_dir)
-    loaded = {split: load_split(root, split) for split in SPLITS}
-
+def train_loaded_splits(
+    loaded: dict[str, tuple[np.ndarray, np.ndarray, set[str]]],
+    output_dir: Path,
+    *,
+    minimum_fraud_rows_per_split: int = 1,
+) -> dict[str, Any]:
     id_sets = {split: loaded[split][2] for split in SPLITS}
     for left, right in (("TRAIN", "VALIDATION"), ("TRAIN", "TEST"), ("VALIDATION", "TEST")):
         overlap = id_sets[left] & id_sets[right]
         if overlap:
             raise ValueError(f"{len(overlap)} payment IDs overlap between {left} and {right}")
+
+    for split in SPLITS:
+        labels = loaded[split][1]
+        positive_count = int(labels.sum())
+        if positive_count < minimum_fraud_rows_per_split:
+            raise ValueError(
+                f"{split} has {positive_count} fraud rows; "
+                f"requires at least {minimum_fraud_rows_per_split}"
+            )
+        if positive_count == len(labels):
+            raise ValueError(f"{split} has no non-fraud rows")
 
     x_train, y_train, _ = loaded["TRAIN"]
     x_val, y_val, _ = loaded["VALIDATION"]
@@ -139,16 +143,35 @@ def main() -> int:
         "split_rows": {split: int(len(loaded[split][1])) for split in SPLITS},
     }
 
-    output = Path(args.output_dir)
-    output.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump(
         {"model": model, "threshold": threshold, "features": FEATURES},
-        output / "logistic_regression_baseline.joblib",
+        output_dir / "logistic_regression_baseline.joblib",
     )
-    (output / "metrics.json").write_text(json.dumps(results, indent=2) + "\n")
+    (output_dir / "metrics.json").write_text(json.dumps(results, indent=2) + "\n")
+    return results
+
+
+def train_from_directory(root: Path, output_dir: Path) -> dict[str, Any]:
+    loaded = {split: load_split(root, split) for split in SPLITS}
+    return train_loaded_splits(loaded, output_dir)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input-dir",
+        default="work/ml/training-export",
+        help="Root directory containing dataset_split=... Parquet folders.",
+    )
+    parser.add_argument("--output-dir", default="work/ml/baseline")
+    args = parser.parse_args()
+
+    output_dir = Path(args.output_dir)
+    results = train_from_directory(Path(args.input_dir), output_dir)
 
     print(json.dumps(results, indent=2))
-    print(f"Saved model and metrics under {output}")
+    print(f"Saved model and metrics under {output_dir}")
     return 0
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import json
 import re
 import shutil
 import sys
@@ -84,6 +85,30 @@ def main() -> int:
         },
     )
     uploaded.append(manifest_key)
+
+    # This final marker is the batch-ready signal. Keep it after every raw event
+    # object and both per-source manifests so Glue cannot start on a partial batch.
+    completion_key = (
+        f"raw/metadata/ingest_date={args.ingest_date}/"
+        f"batch_id={args.batch_id}/batch_complete.json"
+    )
+    completion_manifest = {
+        "manifest_version": 1,
+        "status": "READY",
+        "ingest_date": args.ingest_date,
+        "batch_id": args.batch_id,
+    }
+    s3.put_object(
+        Bucket=args.bucket,
+        Key=completion_key,
+        Body=(json.dumps(completion_manifest, sort_keys=True) + "\n").encode("utf-8"),
+        ContentType="application/json",
+        Metadata={
+            "data-classification": "SYNTHETIC",
+            "batch-id": args.batch_id,
+        },
+    )
+    uploaded.append(completion_key)
 
     for key in uploaded:
         print(f"s3://{args.bucket}/{key}")
